@@ -1,0 +1,39 @@
+#ifndef __SCENE__
+#define __SCENE__
+
+#include "capture.h"
+#include <iostream>
+#include <string>
+#include <opencv2/opencv.hpp>
+
+typedef enum CameraType{
+    TOP = 1,
+    LATERAL = 2
+}CameraType;
+
+typedef enum ConfigFileLabels{
+    TOP_CAMERAS,
+    LATERAL_CAMERAS,
+    OUT
+}ConfigFileLabels;
+
+class Scene{
+private:
+    std::vector<Capture> topCaps; // ceiling mounted cameras
+    std::vector<Capture> lateralCaps; // wall mounted cameras
+    std::string outPath; // Path of the out stream
+    int outWidth;
+    int outHeight;
+    cv::VideoWriter outVideo;
+    
+    int readConfigFile(const std::string& configFilePath);
+    void releaseCaps()const;
+public:
+    Scene(const std::string configFilePath);
+    ~Scene();
+    friend std::ostream& operator <<(std::ostream& os, const Scene& scene);
+    void displayCaptures(const int cameraType)const; //@param TOP, LATERAL, TOP | LATERAL
+    void cameraSwitch();
+};
+
+#endif
