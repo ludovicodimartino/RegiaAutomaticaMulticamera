@@ -23,6 +23,7 @@ Scene::Scene(const std::string configFilePath){
 
 Scene::~Scene(){
     releaseCaps();
+    outVideo.release();
     cv::destroyAllWindows();
 }
 
@@ -135,21 +136,35 @@ void Scene::cameraSwitch(){
 
         double maxArea = 0;
         std::shared_ptr<Capture> shownCamera;
+        cv::Mat frameToshow; 
         for(auto& cap : topCaps){
             // Wait for the processed frame to be ready for this thread
             //TODO: replace with condition_variable
-            while(cap->processedFrameNum < frameNum) std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            if(cap->active && cap->area[frameNum%FRAME_BUFFER] > maxArea){
-                maxArea = cap->area[frameNum%FRAME_BUFFER];
+            std::unique_lock lk(cap->mx);
+            cap->condVar.wait(lk, [cap] {return cap->readyToRetrive;});
+
+            if(cap->active && cap->area > maxArea){
+                maxArea = cap->area;
                 shownCamera = cap;
+                frameToshow = cap->frame.clone();
             } 
+            cap->readyToRetrive = false;
+            lk.unlock();
+            cap->condVar.notify_one();
         }
 
         //CenterCamera if none camera is selected
-        if(shownCamera == nullptr) shownCamera = topCaps[1];
+        if(shownCamera == nullptr){
+            std::cout << "CAMERA FORZATA" << std::endl;
+            shownCamera = topCaps[1];
+        } 
 
         // Write to the stream
-        //outVideo.write(shownCamera->frameBuffer[frameNum%FRAME_BUFFER]);
+        //outVideo.write(frameToshow);
+        char key = cv::waitKey(1);
+        if(key == 'q') break;
+        cv::resize(frameToshow, frameToshow, cv::Size((int)(16/7*400), 400), 0.0, 0.0, cv::INTER_AREA);
+        cv::imshow("OUT", frameToshow);
         
         std::cout << "Shown camera " << shownCamera->capName << std::endl;
         frameNum++;

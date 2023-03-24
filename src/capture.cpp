@@ -8,7 +8,9 @@ Capture::Capture(std::string _capName, std::string _source) : VideoCapture(_sour
     capName = _capName;
     source = _source;
     processedFrameNum = -1; // frame that is being processed
-    std::fill(area, area+FRAME_BUFFER, 0); // init array
+    readyToRetrive = false;
+    //std::fill(area, area+FRAME_BUFFER, 0); // init array
+    area = 0;
     active = false;
     ratio = get(cv::CAP_PROP_FRAME_WIDTH)/get(cv::CAP_PROP_FRAME_HEIGHT);
 }
@@ -94,11 +96,18 @@ void Capture::motionDetection(){
                 
             }
             
-            area[(processedFrameNum + 1)%FRAME_BUFFER] = totalArea;
-            //TODO: acquire lock
-            //if((processedFrameNum + 1) > FRAME_BUFFER*(processedFrameNum + 1)/FRAME_BUFFER) frameBuffer[(processedFrameNum + 1)%FRAME_BUFFER].release();
-            //TODO: release lock
-            //frameBuffer[(processedFrameNum + 1)%FRAME_BUFFER] = currentFrame.clone();
+            
+            //acquire lock
+            std::unique_lock lk(mx);
+            condVar.wait(lk, [this] {return !readyToRetrive;});
+            area = totalArea;
+            frame.release();
+            frame = currentFrame.clone();
+            readyToRetrive = true;
+            // Unlock and notify
+            lk.unlock();
+            condVar.notify_one();
+            
             //circle(currentFrame, cv::Point((xValueMax-xValueMin)/2, (yValueMax-yValueMin)/2), 10, cv::Scalar(255,0,0));
             // circle(currentFrame, centroid, 10, cv::Scalar(255,0,0));
             // cv::resize(currentFrame, currentFrame, cv::Size((int)(ratio*400), 400), 0.0, 0.0, cv::INTER_AREA);

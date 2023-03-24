@@ -6,5 +6,5 @@
  - Calcolare velocità centroide in ogni camera per avere la quantità di moto
  - Segnali per la chiusura dell'applicazione (SIGINT)
  - gestione eccezioni
- - Sincronizzazione thread (utilizzo di mutex al posto di busy wait)
+ - Sincronizzazione thread (utilizzo di mutex e condition variables al posto di busy wait)
  - parsing argomenti: path file di configurazione

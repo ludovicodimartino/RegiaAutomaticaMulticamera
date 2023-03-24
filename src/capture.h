@@ -5,6 +5,7 @@
 #include <string.h>
 #include <iostream>
 #include <mutex>
+#include <condition_variable>
 
 #define FRAME_BUFFER 250
 
@@ -13,11 +14,13 @@ public:
     std::string capName;
     std::string source;
     unsigned int processedFrameNum;
-    cv::Mat frameBuffer[FRAME_BUFFER];
-    double area[FRAME_BUFFER];
+    cv::Mat frame;
+    double area;
     double ratio;
     bool active;
+    bool readyToRetrive;
     std::mutex mx;
+    std::condition_variable condVar;
     Capture(std::string _capName, std::string _source);
     friend std::ostream& operator <<(std::ostream& os, const Capture& cap);
     void display();
