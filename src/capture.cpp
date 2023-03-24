@@ -95,7 +95,9 @@ void Capture::motionDetection(){
             }
             
             area[(processedFrameNum + 1)%FRAME_BUFFER] = totalArea;
+            //TODO: acquire lock
             //if((processedFrameNum + 1) > FRAME_BUFFER*(processedFrameNum + 1)/FRAME_BUFFER) frameBuffer[(processedFrameNum + 1)%FRAME_BUFFER].release();
+            //TODO: release lock
             //frameBuffer[(processedFrameNum + 1)%FRAME_BUFFER] = currentFrame.clone();
             //circle(currentFrame, cv::Point((xValueMax-xValueMin)/2, (yValueMax-yValueMin)/2), 10, cv::Scalar(255,0,0));
             // circle(currentFrame, centroid, 10, cv::Scalar(255,0,0));

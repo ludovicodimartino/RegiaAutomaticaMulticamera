@@ -28,19 +28,19 @@ Scene::~Scene(){
 
 std::ostream& operator <<(std::ostream& os, const Scene& scene){
     os << "TOP CAPTURES" << std::endl;
-    for(auto cap : scene.topCaps) os << "[" << cap << "]" << std::endl;
+    for(auto& cap : scene.topCaps) os << "[" << *cap << "]" << std::endl;
     os << "LATERAL CAPTURES" << std::endl;
-    for(auto cap : scene.lateralCaps) os << "[" << cap << "]" << std::endl;
+    for(auto& cap : scene.lateralCaps) os << "[" << *cap << "]" << std::endl;
     return os;
 }
 
 void Scene::releaseCaps() const{
-    for(auto cap : topCaps) cap.release();
-    for(auto cap : lateralCaps) cap.release();  
+    for(auto& cap : topCaps) cap->release();
+    for(auto& cap : lateralCaps) cap->release();  
 }
 
 void Scene::displayCaptures(const int cameraType) const{
-    std::vector<Capture> capsToDisplay;
+    std::vector<std::shared_ptr<Capture>> capsToDisplay;
     switch (cameraType)
     {
     case TOP:
@@ -60,7 +60,7 @@ void Scene::displayCaptures(const int cameraType) const{
     }
     std::vector<std::thread> threads; // Each cap is shown in a new thread
     for(auto& cap : capsToDisplay){
-        threads.push_back(std::thread(&Capture::display, std::ref(cap)));
+        threads.push_back(std::thread(&Capture::display, std::ref(*cap)));
     }
     for(auto& th : threads){ // Wait for each thread
         th.join();
@@ -98,8 +98,8 @@ int Scene::readConfigFile(const std::string& configFilePath){
             }
 
             // Create the caps
-            if(currentParsing == TOP_CAMERAS) topCaps.push_back(Capture(key, value));
-            if(currentParsing == LATERAL_CAMERAS) lateralCaps.push_back(Capture(key, value));
+            if(currentParsing == TOP_CAMERAS) topCaps.push_back(std::make_shared<Capture>(key, value));
+            if(currentParsing == LATERAL_CAMERAS) lateralCaps.push_back(std::make_shared<Capture>(key, value));
         
             // Setting output parameters
             if(currentParsing == OUT){
@@ -117,7 +117,7 @@ void Scene::cameraSwitch(){
     std::vector<std::thread> threads;
     //topCaps[0].motionDetection();
     for(auto& cap : topCaps){
-         threads.push_back(std::thread(&Capture::motionDetection, std::ref(cap)));
+         threads.push_back(std::thread(&Capture::motionDetection, std::ref(*cap)));
     }
     std::this_thread::sleep_for(std::chrono::seconds(2));
     std::cout << "Threads started" << std::endl;
@@ -126,7 +126,7 @@ void Scene::cameraSwitch(){
     while(1){
         bool atLeastOneActive = false;
         for(auto& cap : topCaps){
-            if(cap.active){
+            if(cap->active){
                 atLeastOneActive = true;
                 break;
             } 
@@ -134,18 +134,19 @@ void Scene::cameraSwitch(){
         if(!atLeastOneActive) break;
 
         double maxArea = 0;
-        Capture* shownCamera = nullptr;
+        std::shared_ptr<Capture> shownCamera;
         for(auto& cap : topCaps){
             // Wait for the processed frame to be ready for this thread
-            while(cap.processedFrameNum < frameNum) std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            if(cap.active && cap.area[frameNum%FRAME_BUFFER] > maxArea){
-                maxArea = cap.area[frameNum%FRAME_BUFFER];
-                shownCamera = &cap;
+            //TODO: replace with condition_variable
+            while(cap->processedFrameNum < frameNum) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            if(cap->active && cap->area[frameNum%FRAME_BUFFER] > maxArea){
+                maxArea = cap->area[frameNum%FRAME_BUFFER];
+                shownCamera = cap;
             } 
         }
 
         //CenterCamera if none camera is selected
-        if(shownCamera == nullptr) shownCamera = &topCaps[1];
+        if(shownCamera == nullptr) shownCamera = topCaps[1];
 
         // Write to the stream
         //outVideo.write(shownCamera->frameBuffer[frameNum%FRAME_BUFFER]);

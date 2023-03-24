@@ -4,6 +4,7 @@
 #include <opencv2/opencv.hpp>
 #include <string.h>
 #include <iostream>
+#include <mutex>
 
 #define FRAME_BUFFER 250
 
@@ -16,6 +17,7 @@ public:
     double area[FRAME_BUFFER];
     double ratio;
     bool active;
+    std::mutex mx;
     Capture(std::string _capName, std::string _source);
     friend std::ostream& operator <<(std::ostream& os, const Capture& cap);
     void display();

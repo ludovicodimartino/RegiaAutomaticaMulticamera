@@ -12,5 +12,6 @@ int main( int argc, char** argv ){
     Scene scene(std::string("../scene.conf"));
     //scene.displayCaptures(TOP);
     scene.cameraSwitch();
+    std::cout << scene << std::endl;
     return 0;
 }

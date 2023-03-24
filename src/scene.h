@@ -5,6 +5,7 @@
 #include <iostream>
 #include <string>
 #include <opencv2/opencv.hpp>
+#include <memory>
 
 typedef enum CameraType{
     TOP = 1,
@@ -19,8 +20,8 @@ typedef enum ConfigFileLabels{
 
 class Scene{
 private:
-    std::vector<Capture> topCaps; // ceiling mounted cameras
-    std::vector<Capture> lateralCaps; // wall mounted cameras
+    std::vector<std::shared_ptr<Capture>> topCaps; // ceiling mounted cameras
+    std::vector<std::shared_ptr<Capture>> lateralCaps; // wall mounted cameras
     std::string outPath; // Path of the out stream
     int outWidth;
     int outHeight;
