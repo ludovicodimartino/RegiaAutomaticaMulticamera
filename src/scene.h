@@ -6,6 +6,7 @@
 #include <string>
 #include <opencv2/opencv.hpp>
 #include <memory>
+#include <thread>
 
 typedef enum CameraType{
     TOP = 1,
@@ -15,6 +16,7 @@ typedef enum CameraType{
 typedef enum ConfigFileLabels{
     TOP_CAMERAS,
     LATERAL_CAMERAS,
+    GENERAL,
     OUT
 }ConfigFileLabels;
 
@@ -22,9 +24,11 @@ class Scene{
 private:
     std::vector<std::shared_ptr<Capture>> topCaps; // ceiling mounted cameras
     std::vector<std::shared_ptr<Capture>> lateralCaps; // wall mounted cameras
+    std::vector<std::thread> threads; // threads used for doing the capture computations 
     std::string outPath; // Path of the out stream
     int outWidth;
     int outHeight;
+    bool displayOutput;
     cv::VideoWriter outVideo;
     
     int readConfigFile(const std::string& configFilePath);
@@ -35,6 +39,7 @@ public:
     friend std::ostream& operator <<(std::ostream& os, const Scene& scene);
     void displayCaptures(const int cameraType)const; //@param TOP, LATERAL, TOP | LATERAL
     void cameraSwitch();
+    void signalHandler(int signum);
 };
 
 #endif

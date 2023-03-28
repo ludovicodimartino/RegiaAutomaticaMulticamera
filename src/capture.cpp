@@ -1,6 +1,7 @@
 #include "capture.h"
 #include <chrono>
 #include <thread>
+#include <csignal>
 
 #define DILATE_SIZE 5
 
@@ -14,6 +15,8 @@ Capture::Capture(std::string _capName, std::string _source) : VideoCapture(_sour
     active = false;
     ratio = get(cv::CAP_PROP_FRAME_WIDTH)/get(cv::CAP_PROP_FRAME_HEIGHT);
 }
+
+bool Capture::stopSignalReceived = false;
 
 std::ostream& operator <<(std::ostream& os, const Capture& cap){
     os << "CAPTURE NAME: " << cap.capName << " CAPTURE PATH: " << cap.source << " RATIO: " << cap.ratio;
@@ -31,7 +34,9 @@ void Capture::display(){
         //std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
         if(!read(currentFrame)) break;
         if(frameNum > 2 && !getWindowProperty(capName, cv::WND_PROP_VISIBLE)) break; // close the window
+        if(stopSignalReceived) break;
         cv::resize(currentFrame, resized, cv::Size((int)(ratio*400), 400));
+        cv::namedWindow(capName, cv::WINDOW_NORMAL);
         imshow(capName, resized);
         cv::waitKey(1);
         frameNum++;
@@ -47,7 +52,9 @@ void Capture::motionDetection(){
     cv::Point centroid, previousCentroid;
     while(1){
         active = true;
-        if(!read(currentFrame)){
+        if(!read(currentFrame)) break;
+        if(stopSignalReceived){
+            readyToRetrive = true;
             break;
         } 
         cvtColor(currentFrame, processedFrame, cv::COLOR_BGR2GRAY); //gray scale

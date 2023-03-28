@@ -7,4 +7,5 @@
  - Segnali per la chiusura dell'applicazione (SIGINT)
  - gestione eccezioni
  - Sincronizzazione thread (utilizzo di mutex e condition variables al posto di busy wait)
+ - Crop output video
  - parsing argomenti: path file di configurazione

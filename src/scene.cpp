@@ -9,10 +9,11 @@
 #include <opencv2/highgui.hpp>
 
 Scene::Scene(const std::string configFilePath){
-    // Default output values
+    // Default config values
     outWidth = 1920;
     outHeight = 1080;
     outPath = "./out/out.mp4";
+    displayOutput = false;
 
     // Reading config File
     if(readConfigFile(configFilePath)) std::cerr << "Configuration file error!";
@@ -25,6 +26,10 @@ Scene::~Scene(){
     releaseCaps();
     outVideo.release();
     cv::destroyAllWindows();
+}
+
+void Scene::signalHandler(int signum){
+    std::cout << "SIGNAL RECEIVED" << std::endl;
 }
 
 std::ostream& operator <<(std::ostream& os, const Scene& scene){
@@ -88,6 +93,10 @@ int Scene::readConfigFile(const std::string& configFilePath){
                 currentParsing = OUT;
                 continue;
             }
+            if(line == "[GENERAL]"){
+                currentParsing = GENERAL;
+                continue;
+            }
             std::size_t delimiterPos = line.find("="); // find the = sign
             std::string key = line.substr(0, delimiterPos); // key, before the = sign
             std::string value = line.substr(delimiterPos + 1); // value, after the = sign
@@ -107,6 +116,13 @@ int Scene::readConfigFile(const std::string& configFilePath){
                 if(key == "outPath") outPath = value;
                 if(key == "width") outWidth = std::stoi(value);
                 if(key == "height") outHeight = std::stoi(value);
+            }
+
+            //Setting general parameters
+            if(currentParsing == GENERAL){
+                if(key == "displayOutput"){
+                    if(value == "true") displayOutput = true;
+                }
             } 
         }
         configFile.close();
@@ -115,7 +131,6 @@ int Scene::readConfigFile(const std::string& configFilePath){
 }
 
 void Scene::cameraSwitch(){
-    std::vector<std::thread> threads;
     //topCaps[0].motionDetection();
     for(auto& cap : topCaps){
          threads.push_back(std::thread(&Capture::motionDetection, std::ref(*cap)));
@@ -139,10 +154,14 @@ void Scene::cameraSwitch(){
         cv::Mat frameToshow; 
         for(auto& cap : topCaps){
             // Wait for the processed frame to be ready for this thread
-            //TODO: replace with condition_variable
             std::unique_lock lk(cap->mx);
             cap->condVar.wait(lk, [cap] {return cap->readyToRetrive;});
-
+            if(Capture::stopSignalReceived){
+                cap->readyToRetrive = false;
+                lk.unlock();
+                cap->condVar.notify_one();
+                break;
+            } 
             if(cap->active && cap->area > maxArea){
                 maxArea = cap->area;
                 shownCamera = cap;
@@ -153,19 +172,31 @@ void Scene::cameraSwitch(){
             cap->condVar.notify_one();
         }
 
+        if(Capture::stopSignalReceived){
+            for(auto& cap : topCaps){
+                cap->readyToRetrive = false;
+                cap->condVar.notify_one();
+            }
+            break;
+        } 
+
         //CenterCamera if none camera is selected
         if(shownCamera == nullptr){
             std::cout << "CAMERA FORZATA" << std::endl;
             shownCamera = topCaps[1];
         } 
 
-        // Write to the stream
-        //outVideo.write(frameToshow);
-        char key = cv::waitKey(1);
-        if(key == 'q') break;
-        cv::resize(frameToshow, frameToshow, cv::Size((int)(16/7*400), 400), 0.0, 0.0, cv::INTER_AREA);
-        cv::imshow("OUT", frameToshow);
         
+        // Write to the stream
+        cv::resize(frameToshow, frameToshow, cv::Size(outWidth, outHeight), 0.0, 0.0, cv::INTER_AREA);
+        outVideo.write(frameToshow);
+        if(displayOutput){
+            cv::namedWindow("OUT", cv::WND_PROP_OPENGL);
+            cv::setWindowProperty("OUT", cv::WND_PROP_OPENGL, cv::WINDOW_OPENGL);
+            cv::waitKey(1);
+            if(!getWindowProperty("OUT", cv::WND_PROP_VISIBLE)) displayOutput = false;
+            else cv::imshow("OUT", frameToshow);
+        }
         std::cout << "Shown camera " << shownCamera->capName << std::endl;
         frameNum++;
     }

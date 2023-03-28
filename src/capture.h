@@ -11,6 +11,7 @@
 
 class Capture : public cv::VideoCapture{
 public:
+    static bool stopSignalReceived;
     std::string capName;
     std::string source;
     unsigned int processedFrameNum;
@@ -27,5 +28,4 @@ public:
     void motionDetection();
     bool operator==(const Capture& cap)const;
 };
-
 #endif
