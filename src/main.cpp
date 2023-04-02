@@ -17,7 +17,6 @@ void signalHandler( int signum ) {
 int main( int argc, char** argv ){
     //Scene init
     Scene scene(std::string("../scene.conf"));
-
     //Signals init
     signal(SIGTERM, signalHandler);
     signal(SIGINT, signalHandler);

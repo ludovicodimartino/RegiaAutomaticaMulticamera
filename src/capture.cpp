@@ -27,6 +27,10 @@ bool Capture::operator==(const Capture& cap)const{
     return capName == cap.capName;
 }
 
+cv::Mat Capture::crop(const cv::Rect cropRect, const cv::Mat& uncuttedFrame)const{
+    return uncuttedFrame(cropRect).clone();
+}
+
 void Capture::display(){
     unsigned int frameNum = 0;
     cv::Mat currentFrame, resized;
@@ -43,26 +47,29 @@ void Capture::display(){
         //std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
         //std::cout << "FPS = " << 1000/(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) << "[fps]" << std::endl;
     }
-
 }
 
 void Capture::motionDetection(){
     std::cout << "thread ID: " << std::this_thread::get_id() << " Name: " << capName << std::endl;
-    cv::Mat currentFrame, previousFrame, processedFrame, differenceFrame;
+    cv::Mat currentFrame, previousFrame, originalFrame, differenceFrame;
     cv::Point centroid, previousCentroid;
     while(1){
         active = true;
-        if(!read(currentFrame)) break;
+        if(!read(originalFrame)) break;
+        //Crop the frame
+        currentFrame = originalFrame.clone();
+        currentFrame = currentFrame(cv::Range(0, originalFrame.rows), cv::Range(1000, 3200));
+        
         if(stopSignalReceived){
             readyToRetrive = true;
             break;
         } 
-        cvtColor(currentFrame, processedFrame, cv::COLOR_BGR2GRAY); //gray scale
-        GaussianBlur(processedFrame, processedFrame, cv::Size(5,5), 2); //gussian blur
+        cvtColor(currentFrame, currentFrame, cv::COLOR_BGR2GRAY); //gray scale
+        GaussianBlur(currentFrame, currentFrame, cv::Size(5,5), 2); //gussian blur
         cv::waitKey(10);
         //if((processedFrameNum + 1) > 2 && !cv::getWindowProperty(capName, cv::WND_PROP_VISIBLE)) break;
         if(processedFrameNum + 1) {
-            absdiff(previousFrame, processedFrame, differenceFrame);
+            absdiff(previousFrame, currentFrame, differenceFrame);
             // make the areas bigger
             dilate(differenceFrame, differenceFrame, cv::getStructuringElement( cv::MORPH_ELLIPSE,
                        cv::Size( DILATE_SIZE*DILATE_SIZE + 1, DILATE_SIZE*DILATE_SIZE+1 ),
@@ -72,6 +79,7 @@ void Capture::motionDetection(){
             //Find contours
             std::vector<std::vector<cv::Point>> contours;
             findContours(differenceFrame, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+            //drawContours(originalFrame, contours, -1, cv::Scalar(0, 255, 0), 20);
             //Calculate areas
             int xValueMax = 0, xValueMin = 2*get(cv::CAP_PROP_FRAME_WIDTH);
             int yValueMax = 0, yValueMin = 2*get(cv::CAP_PROP_FRAME_HEIGHT);
@@ -109,7 +117,7 @@ void Capture::motionDetection(){
             condVar.wait(lk, [this] {return !readyToRetrive;});
             area = totalArea;
             frame.release();
-            frame = currentFrame.clone();
+            frame = originalFrame.clone();
             readyToRetrive = true;
             // Unlock and notify
             lk.unlock();
@@ -122,9 +130,10 @@ void Capture::motionDetection(){
         }
         //imshow("Processed", processedFrame);
         previousFrame.release();
-        previousFrame = processedFrame.clone(); //Save the previous frame
-        processedFrame.release();
+        previousFrame = currentFrame.clone(); //Save the previous frame
+        //processedFrame.release();
         currentFrame.release();
+        originalFrame.release();
         ++processedFrameNum;
     }
     active = false;

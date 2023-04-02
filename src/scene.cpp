@@ -152,24 +152,32 @@ void Scene::cameraSwitch(){
         double maxArea = 0;
         std::shared_ptr<Capture> shownCamera;
         cv::Mat frameToshow; 
-        for(auto& cap : topCaps){
+        for(int i = 0; i < topCaps.size(); i++){
             // Wait for the processed frame to be ready for this thread
-            std::unique_lock lk(cap->mx);
-            cap->condVar.wait(lk, [cap] {return cap->readyToRetrive;});
+            std::unique_lock lk(topCaps[i]->mx);
+            topCaps[i]->condVar.wait(lk, [&] {return topCaps[i]->readyToRetrive;});
             if(Capture::stopSignalReceived){
-                cap->readyToRetrive = false;
+                topCaps[i]->readyToRetrive = false;
                 lk.unlock();
-                cap->condVar.notify_one();
+                topCaps[i]->condVar.notify_one();
                 break;
             } 
-            if(cap->active && cap->area > maxArea){
-                maxArea = cap->area;
-                shownCamera = cap;
-                frameToshow = cap->frame.clone();
+            if(topCaps[i]->active){
+                if(topCaps[i]->area > maxArea){
+                    std::cout << "topCaps[i]->area > maxArea" << topCaps[i]->area << " > " << maxArea << std::endl;
+                    maxArea = topCaps[i]->area;
+                    shownCamera = topCaps[i];
+                    frameToshow = topCaps[i]->frame.clone();
+                }
+                if(shownCamera == nullptr && i == topCaps.size()-1){ // Last reached without a max area
+                    frameToshow = topCaps[i]->frame.clone();
+                    shownCamera = topCaps[i];
+                    std::cout << "Forced" << std::endl;
+                } 
             } 
-            cap->readyToRetrive = false;
+            topCaps[i]->readyToRetrive = false;
             lk.unlock();
-            cap->condVar.notify_one();
+            topCaps[i]->condVar.notify_one();
         }
 
         if(Capture::stopSignalReceived){
@@ -187,8 +195,11 @@ void Scene::cameraSwitch(){
         } 
 
         
+        //Resize
+        cv::resize(frameToshow, frameToshow, cv::Size((frameToshow.cols/frameToshow.rows)*outHeight,outHeight), 0.0, 0.0, cv::INTER_AREA);
+        //Crop to out dimensions
+        frameToshow = frameToshow(cv::Range(0, outHeight), cv::Range(frameToshow.cols/2 - outWidth/2, frameToshow.cols/2 + outWidth/2));
         // Write to the stream
-        cv::resize(frameToshow, frameToshow, cv::Size(outWidth, outHeight), 0.0, 0.0, cv::INTER_AREA);
         outVideo.write(frameToshow);
         if(displayOutput){
             cv::namedWindow("OUT", cv::WND_PROP_OPENGL);

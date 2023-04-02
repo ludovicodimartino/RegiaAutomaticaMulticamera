@@ -26,6 +26,7 @@ public:
     friend std::ostream& operator <<(std::ostream& os, const Capture& cap);
     void display();
     void motionDetection();
+    cv::Mat crop(const cv::Rect cropRect, const cv::Mat& uncuttedFrame)const;
     bool operator==(const Capture& cap)const;
 };
 #endif
