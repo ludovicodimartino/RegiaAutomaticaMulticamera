@@ -66,7 +66,6 @@ void Capture::motionDetection(){
         } 
         cvtColor(currentFrame, currentFrame, cv::COLOR_BGR2GRAY); //gray scale
         GaussianBlur(currentFrame, currentFrame, cv::Size(5,5), 2); //gussian blur
-        cv::waitKey(10);
         //if((processedFrameNum + 1) > 2 && !cv::getWindowProperty(capName, cv::WND_PROP_VISIBLE)) break;
         if(processedFrameNum + 1) {
             absdiff(previousFrame, currentFrame, differenceFrame);
@@ -128,10 +127,8 @@ void Capture::motionDetection(){
             // cv::resize(currentFrame, currentFrame, cv::Size((int)(ratio*400), 400), 0.0, 0.0, cv::INTER_AREA);
             // imshow(capName, currentFrame);
         }
-        //imshow("Processed", processedFrame);
         previousFrame.release();
         previousFrame = currentFrame.clone(); //Save the previous frame
-        //processedFrame.release();
         currentFrame.release();
         originalFrame.release();
         ++processedFrameNum;

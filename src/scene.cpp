@@ -139,6 +139,7 @@ void Scene::cameraSwitch(){
     std::cout << "Threads started" << std::endl;
     // read captures parameters to determine which camera is the active one.
     unsigned int frameNum = 0;
+    int64 last_frame;
     while(1){
         bool atLeastOneActive = false;
         for(auto& cap : topCaps){
@@ -164,7 +165,7 @@ void Scene::cameraSwitch(){
             } 
             if(topCaps[i]->active){
                 if(topCaps[i]->area > maxArea){
-                    std::cout << "topCaps[i]->area > maxArea" << topCaps[i]->area << " > " << maxArea << std::endl;
+                    //std::cout << "topCaps[i]->area > maxArea" << topCaps[i]->area << " > " << maxArea << std::endl;
                     maxArea = topCaps[i]->area;
                     shownCamera = topCaps[i];
                     frameToshow = topCaps[i]->frame.clone();
@@ -194,7 +195,7 @@ void Scene::cameraSwitch(){
             shownCamera = topCaps[1];
         } 
 
-        
+        size_t sizeInBytes = frameToshow.total() * frameToshow.elemSize(); //calculate the mat size in byte
         //Resize
         cv::resize(frameToshow, frameToshow, cv::Size((frameToshow.cols/frameToshow.rows)*outHeight,outHeight), 0.0, 0.0, cv::INTER_AREA);
         //Crop to out dimensions
@@ -208,7 +209,10 @@ void Scene::cameraSwitch(){
             if(!getWindowProperty("OUT", cv::WND_PROP_VISIBLE)) displayOutput = false;
             else cv::imshow("OUT", frameToshow);
         }
-        std::cout << "Shown camera " << shownCamera->capName << std::endl;
+        //std::cout << "Shown camera " << shownCamera->capName << std::endl;
+        double fps = cv::getTickFrequency()/(cv::getTickCount() - last_frame);
+        std::cout << "FPS: " << fps << std::endl;
+        last_frame = cv::getTickCount();
         frameNum++;
     }
     
