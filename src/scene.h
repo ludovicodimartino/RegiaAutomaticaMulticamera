@@ -21,6 +21,12 @@ typedef enum ConfigFileLabels{
 }ConfigFileLabels;
 
 class Scene{
+public:
+    Scene(const std::string configFilePath);
+    ~Scene();
+    friend std::ostream& operator <<(std::ostream& os, const Scene& scene);
+    void displayCaptures(const int cameraType)const; //@param TOP, LATERAL, TOP | LATERAL
+    void cameraSwitch();
 private:
     std::vector<std::shared_ptr<Capture>> topCaps; // ceiling mounted cameras
     std::vector<std::shared_ptr<Capture>> lateralCaps; // wall mounted cameras
@@ -30,16 +36,8 @@ private:
     int outHeight;
     bool displayOutput;
     cv::VideoWriter outVideo;
-    
     int readConfigFile(const std::string& configFilePath);
     void releaseCaps()const;
-public:
-    Scene(const std::string configFilePath);
-    ~Scene();
-    friend std::ostream& operator <<(std::ostream& os, const Scene& scene);
-    void displayCaptures(const int cameraType)const; //@param TOP, LATERAL, TOP | LATERAL
-    void cameraSwitch();
-    void signalHandler(int signum);
 };
 
 #endif

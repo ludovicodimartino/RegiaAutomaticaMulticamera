@@ -42,7 +42,7 @@ int main(int argc, char** argv){
 }
 
 void signalHandler( int signum ) {
-   std::cout << "Signal received by main" <<  std::endl;
+   std::cout << "Signal received" <<  std::endl;
    Capture::stopSignalReceived = true;
 }
 
@@ -50,9 +50,9 @@ void printHelpAndExit(){
     std::cout << "Usage\n\n";
     std::cout << "  MultiCamSwitch [options]\n\n";
     std::cout << "Options\n";
-    std::cout << "  -c,--config <path-to-config-file>\t= Explicitly specify the path to the configuration file." << std::endl;
-    std::cout << "  -d,--display\t= display input strams. No camera switching." << std::endl;
-    std::cout << "  -h,-H,--help\t= print usage information and exit." << std::endl;
+    std::cout << "  -c,--config <path-to-config-file>   = Explicitly specify the path to the configuration file." << std::endl;
+    std::cout << "  -d,--display                        = display input strams. No camera switching." << std::endl;
+    std::cout << "  -h,-H,--help                        = print usage information and exit." << std::endl;
     exit(0);
 }
 

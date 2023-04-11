@@ -6,12 +6,15 @@
 #define DILATE_SIZE 5
 
 Capture::Capture(std::string _capName, std::string _source) : VideoCapture(_source){
+    if(!isOpened()){
+        std::cerr << "Video file opening error" << std::endl;
+        exit(1);
+    }
     capName = _capName;
     source = _source;
     processedFrameNum = -1; // frame that is being processed
     readyToRetrive = false;
-    //std::fill(area, area+FRAME_BUFFER, 0); // init array
-    area = 0;
+    momentum = 0;
     active = false;
     ratio = get(cv::CAP_PROP_FRAME_WIDTH)/get(cv::CAP_PROP_FRAME_HEIGHT);
 }
@@ -51,87 +54,110 @@ void Capture::display(){
 
 void Capture::motionDetection(){
     std::cout << "thread ID: " << std::this_thread::get_id() << " Name: " << capName << std::endl;
-    cv::Mat currentFrame, previousFrame, originalFrame, differenceFrame;
-    cv::Point centroid, previousCentroid;
+    cv::Mat currentFrame, previousFrame, originalFrame, currDiffFrame;
+    // cv::Point centroid, previousCentroid;
     while(1){
         active = true;
         if(!read(originalFrame)) break;
-        //Crop the frame
-        currentFrame = originalFrame.clone();
-        currentFrame = currentFrame(cv::Range(0, originalFrame.rows), cv::Range(1000, 3200));
         
+        // Copy the original frame
+        currentFrame = originalFrame.clone();
+        // Crop the frame in order to consider just the playground
+        currentFrame = currentFrame(cv::Range(0, originalFrame.rows), cv::Range(350, 1570));
+        
+        // Check if a stop signal has arrived
         if(stopSignalReceived){
             readyToRetrive = true;
             break;
-        } 
+        }
+
+        // Processing
         cvtColor(currentFrame, currentFrame, cv::COLOR_BGR2GRAY); //gray scale
         GaussianBlur(currentFrame, currentFrame, cv::Size(5,5), 2); //gussian blur
-        //if((processedFrameNum + 1) > 2 && !cv::getWindowProperty(capName, cv::WND_PROP_VISIBLE)) break;
+        
         if(processedFrameNum + 1) {
-            absdiff(previousFrame, currentFrame, differenceFrame);
+            absdiff(previousFrame, currentFrame, currDiffFrame);
             // make the areas bigger
-            dilate(differenceFrame, differenceFrame, cv::getStructuringElement( cv::MORPH_ELLIPSE,
+            dilate(currDiffFrame, currDiffFrame, cv::getStructuringElement( cv::MORPH_ELLIPSE,
                        cv::Size( DILATE_SIZE*DILATE_SIZE + 1, DILATE_SIZE*DILATE_SIZE+1 ),
                        cv::Point( 2, 2 )));
             //Threshold (black and white)
-            threshold(differenceFrame, differenceFrame, 20, 255, cv::THRESH_BINARY);
-            //Find contours
+            threshold(currDiffFrame, currDiffFrame, 20, 255, cv::THRESH_BINARY);
+        
+            //GET MOMENTUM
             std::vector<std::vector<cv::Point>> contours;
-            findContours(differenceFrame, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+            findContours(currDiffFrame, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
             //drawContours(originalFrame, contours, -1, cv::Scalar(0, 255, 0), 20);
-            //Calculate areas
-            int xValueMax = 0, xValueMin = 2*get(cv::CAP_PROP_FRAME_WIDTH);
-            int yValueMax = 0, yValueMin = 2*get(cv::CAP_PROP_FRAME_HEIGHT);
-
-            double totalArea = 0;
-            for(int i = 0; i < contours.size(); i++){
-                double area = contourArea(contours[i]);
-                if (area < 50){
-                    continue;
-                }
-                //std::cout << "AREA VALE: " << area << std::endl;
-
-                // find moments of the image
-                // cv::Moments m = cv::moments(differenceFrame,true);
-                // centroid = cv::Point(m.m10/m.m00, m.m01/m.m00);
-                // cv::Rect rect = boundingRect(contours[i]);
-                //if(rect.x < TOP_CORNER_X || rect.x > BOTTOM_CORNER_X || rect.y < TOP_CORNER_Y || rect.y > BOTTOM_CORNER_Y) continue;
-                //std::cout<< cv::Mat(centroid)<< std::endl;
-
-                //Find the min and max x, y.
-                // int x = (rect.x + rect.width/2);
-                // int y = (rect.y + rect.height/2);
-                // if(xValueMax < x) xValueMax = x;
-                // if(yValueMax < y) yValueMax = y;
-                // if(xValueMin > x) xValueMin = x;
-                // if(yValueMin > y) yValueMin = y;
-                // rectangle(currentFrame, rect, cv::Scalar(0, 255, 0), 1);
-                totalArea += area;
-                
-            }
-            
-            
+            double area = getArea(contours);
+            double avgVel = getAvgVelocity(currentFrame, previousFrame, contours);
+            double m = area*avgVel;
             //acquire lock
             std::unique_lock lk(mx);
             condVar.wait(lk, [this] {return !readyToRetrive;});
-            area = totalArea;
+            momentum = m; // update the area
             frame.release();
-            frame = originalFrame.clone();
+            frame = originalFrame.clone(); // update the frame
             readyToRetrive = true;
             // Unlock and notify
             lk.unlock();
-            condVar.notify_one();
-            
-            //circle(currentFrame, cv::Point((xValueMax-xValueMin)/2, (yValueMax-yValueMin)/2), 10, cv::Scalar(255,0,0));
-            // circle(currentFrame, centroid, 10, cv::Scalar(255,0,0));
-            // cv::resize(currentFrame, currentFrame, cv::Size((int)(ratio*400), 400), 0.0, 0.0, cv::INTER_AREA);
-            // imshow(capName, currentFrame);
+            condVar.notify_one();  
         }
+
         previousFrame.release();
-        previousFrame = currentFrame.clone(); //Save the previous frame
+        previousFrame = currentFrame.clone(); // Save the previous frame
         currentFrame.release();
+        currDiffFrame.release();
         originalFrame.release();
         ++processedFrameNum;
     }
     active = false;
+}
+
+double Capture::getArea(const std::vector<std::vector<cv::Point>>& contours)const{
+    // Calculate the area
+    double totalArea = 0;
+    for(int i = 0; i < contours.size(); i++){
+        double area = contourArea(contours[i]);
+        if (area < 50){ // Do not include obj with a small area
+            continue;
+        }
+        totalArea += area;
+    }
+    return totalArea;
+}
+
+double Capture::getAvgVelocity(const cv::Mat& currFrameGray, const cv::Mat& prevFrameGray, const std::vector<std::vector<cv::Point>>& contours){
+
+    if(contours.size() == 0) return 0;
+
+    std::vector<cv::Moments> m; //Moments
+    for(const auto& contour : contours){
+        m.push_back(cv::moments(contour, true));
+    }
+
+    std::vector<cv::Point2f> mc; //Centroids
+    for(const auto& moment : m){
+        mc.push_back(cv::Point2f( moment.m10/moment.m00 , moment.m01/moment.m00 ));
+    }
+
+    // Optical Flow Lucas-Kanade method
+    std::vector<uchar> status;
+    std::vector<float> err;
+    std::vector<cv::Point2f> calcPoints;
+    cv::TermCriteria criteria = cv::TermCriteria((cv::TermCriteria::COUNT) + (cv::TermCriteria::EPS), 10, 0.03);
+    cv::calcOpticalFlowPyrLK(prevFrameGray, currFrameGray, mc, calcPoints, status, err, cv::Size(15,15), 2, criteria);
+
+    std::vector<cv::Point2f> good_new;
+    int good = 0;
+    double velocitySum = 0;
+    for(int i = 0; i < mc.size(); i++){
+        // Select good points
+        if(status[i] == 1) {
+            good++;
+            cv::Point2f diff = mc[i] - calcPoints[i];    
+            velocitySum += cv::sqrt((diff.x*diff.x) + (diff.y*diff.y));
+            good_new.push_back(calcPoints[i]);
+        }
+    }
+    return (velocitySum/good)*100; // *100 to avoid sub 1 values
 }

@@ -7,16 +7,19 @@
 #include <mutex>
 #include <condition_variable>
 
-#define FRAME_BUFFER 250
-
 class Capture : public cv::VideoCapture{
+private:
+    double getArea(const std::vector<std::vector<cv::Point>>& contours)const;
+    double getAvgVelocity(const cv::Mat& currFrameGray, const cv::Mat& prevFrameGray, const std::vector<std::vector<cv::Point>>& contours);
+
 public:
     static bool stopSignalReceived;
     std::string capName;
     std::string source;
     unsigned int processedFrameNum;
     cv::Mat frame;
-    double area;
+    double momentum;
+    double vel;
     double ratio;
     bool active;
     bool readyToRetrive;

@@ -28,10 +28,6 @@ Scene::~Scene(){
     cv::destroyAllWindows();
 }
 
-void Scene::signalHandler(int signum){
-    std::cout << "SIGNAL RECEIVED" << std::endl;
-}
-
 std::ostream& operator <<(std::ostream& os, const Scene& scene){
     os << "TOP CAPTURES" << std::endl;
     for(auto& cap : scene.topCaps) os << "[" << *cap << "]" << std::endl;
@@ -77,6 +73,7 @@ int Scene::readConfigFile(const std::string& configFilePath){
     ConfigFileLabels currentParsing; // What the program is parsing
     std::ifstream configFile(configFilePath);
     if (configFile.is_open()) {
+        std::cout << "Reading configuration file..." << std::endl;
         std::string line;
         while (std::getline(configFile, line)) { // read the configFile line by line 
             line.erase(std::remove_if(line.begin(), line.end(), isspace),line.end()); // Erasing the spaces
@@ -126,6 +123,7 @@ int Scene::readConfigFile(const std::string& configFilePath){
             } 
         }
         configFile.close();
+        std::cout << "Configuration read!" << std::endl;
     } else return -1; //open file error
     return 0;
 }
@@ -164,9 +162,9 @@ void Scene::cameraSwitch(){
                 break;
             } 
             if(topCaps[i]->active){
-                if(topCaps[i]->area > maxArea){
-                    //std::cout << "topCaps[i]->area > maxArea" << topCaps[i]->area << " > " << maxArea << std::endl;
-                    maxArea = topCaps[i]->area;
+                if(topCaps[i]->momentum > maxArea){
+                    //std::cout << "topCaps[i]->momentum > maxArea" << topCaps[i]->momentum << " > " << maxArea << std::endl;
+                    maxArea = topCaps[i]->momentum;
                     shownCamera = topCaps[i];
                     frameToshow = topCaps[i]->frame.clone();
                 }
@@ -197,7 +195,7 @@ void Scene::cameraSwitch(){
 
         size_t sizeInBytes = frameToshow.total() * frameToshow.elemSize(); //calculate the mat size in byte
         //Resize
-        cv::resize(frameToshow, frameToshow, cv::Size((frameToshow.cols/frameToshow.rows)*outHeight,outHeight), 0.0, 0.0, cv::INTER_AREA);
+        cv::resize(frameToshow, frameToshow, cv::Size((frameToshow.cols/(double)(frameToshow.rows))*outHeight, outHeight), 0.0, 0.0, cv::INTER_AREA);
         //Crop to out dimensions
         frameToshow = frameToshow(cv::Range(0, outHeight), cv::Range(frameToshow.cols/2 - outWidth/2, frameToshow.cols/2 + outWidth/2));
         // Write to the stream
@@ -211,7 +209,7 @@ void Scene::cameraSwitch(){
         }
         //std::cout << "Shown camera " << shownCamera->capName << std::endl;
         double fps = cv::getTickFrequency()/(cv::getTickCount() - last_frame);
-        std::cout << "FPS: " << fps << std::endl;
+        //std::cout << "FPS: " << fps << std::endl;
         last_frame = cv::getTickCount();
         frameNum++;
     }
