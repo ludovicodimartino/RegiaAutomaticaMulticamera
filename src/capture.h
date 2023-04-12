@@ -19,7 +19,6 @@ public:
     unsigned int processedFrameNum;
     cv::Mat frame;
     double momentum;
-    double vel;
     double ratio;
     bool active;
     bool readyToRetrive;

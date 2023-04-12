@@ -14,6 +14,7 @@ Scene::Scene(const std::string configFilePath){
     outHeight = 1080;
     outPath = "./out/out.mp4";
     displayOutput = false;
+    sampling = 20;
 
     // Reading config File
     if(readConfigFile(configFilePath)) std::cerr << "Configuration file error!";
@@ -120,6 +121,7 @@ int Scene::readConfigFile(const std::string& configFilePath){
                 if(key == "displayOutput"){
                     if(value == "true") displayOutput = true;
                 }
+                if(key == "sampling") sampling = std::stoi(value);
             } 
         }
         configFile.close();
@@ -129,15 +131,18 @@ int Scene::readConfigFile(const std::string& configFilePath){
 }
 
 void Scene::cameraSwitch(){
-    //topCaps[0].motionDetection();
+    // Start threads
     for(auto& cap : topCaps){
          threads.push_back(std::thread(&Capture::motionDetection, std::ref(*cap)));
     }
     std::this_thread::sleep_for(std::chrono::seconds(2));
     std::cout << "Threads started" << std::endl;
-    // read captures parameters to determine which camera is the active one.
-    unsigned int frameNum = 0;
+    
+    // read captures parameters to determine which cameras are active.
+    uint frameNum = 0;
     int64 last_frame;
+    int selectedFrames[topCaps.size()] = { 0 }; // Save the selected frame index as if the swithing were happening every frame
+    int shownCaptureIndex = 0;
     while(1){
         // Check if at least one camera is active
         bool atLeastOneActive = false;
@@ -152,28 +157,33 @@ void Scene::cameraSwitch(){
 
         // Select the frame to show based on the frame that has the max momentum.
         double maxMomentum = 0;
-        std::shared_ptr<Capture> shownCamera;
-        cv::Mat frameToshow; 
+        int slectedCapture = -1;
+        cv::Mat frameToshow;
+        
+        
         for(int i = 0; i < topCaps.size(); i++){
             // Wait for the processed frame to be ready for this thread
             std::unique_lock lk(topCaps[i]->mx);
             topCaps[i]->condVar.wait(lk, [&] {return topCaps[i]->readyToRetrive;});
+
+            // Stop signal received
             if(Capture::stopSignalReceived){
                 topCaps[i]->readyToRetrive = false;
                 lk.unlock();
                 topCaps[i]->condVar.notify_one();
                 break;
             } 
+
+            if(i == shownCaptureIndex) frameToshow = topCaps[i]->frame.clone();
+
             if(topCaps[i]->active){
                 if(topCaps[i]->momentum > maxMomentum){
                     //std::cout << "topCaps[i]->momentum > maxMomentum" << topCaps[i]->momentum << " > " << maxMomentum << std::endl;
                     maxMomentum = topCaps[i]->momentum;
-                    shownCamera = topCaps[i];
-                    frameToshow = topCaps[i]->frame.clone();
+                    slectedCapture = i;
                 }
-                if(shownCamera == nullptr && i == topCaps.size()-1){ // Last reached without a max momentum: force a frame
-                    frameToshow = topCaps[i]->frame.clone();
-                    shownCamera = topCaps[i];
+                if(slectedCapture == -1 && i == topCaps.size()-1){ // Last reached without a max momentum: force a frame
+                    slectedCapture = i;
                     std::cout << "Forced" << std::endl;
                 } 
             } 
@@ -182,6 +192,15 @@ void Scene::cameraSwitch(){
             topCaps[i]->condVar.notify_one();
         }
 
+        //Increment the selectedFrame count
+        selectedFrames[slectedCapture]++;
+
+        // Every "sampling" frames the frame to display changes: update shownCaptureIndex
+        // ShownCaptureIndex is updated taking into account what has happened since the last update
+        if(frameNum % sampling == 0){
+            shownCaptureIndex = std::distance(selectedFrames, std::max_element(selectedFrames, selectedFrames + topCaps.size()));
+            std::fill(selectedFrames, selectedFrames + topCaps.size(), 0);
+        }
 
         // Check if a stop signal has been received
         if(Capture::stopSignalReceived){
