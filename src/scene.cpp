@@ -139,8 +139,9 @@ void Scene::cameraSwitch(){
     unsigned int frameNum = 0;
     int64 last_frame;
     while(1){
+        // Check if at least one camera is active
         bool atLeastOneActive = false;
-        for(auto& cap : topCaps){
+        for(auto& cap : topCaps){ 
             if(cap->active){
                 atLeastOneActive = true;
                 break;
@@ -148,7 +149,9 @@ void Scene::cameraSwitch(){
         }
         if(!atLeastOneActive) break;
 
-        double maxArea = 0;
+
+        // Select the frame to show based on the frame that has the max momentum.
+        double maxMomentum = 0;
         std::shared_ptr<Capture> shownCamera;
         cv::Mat frameToshow; 
         for(int i = 0; i < topCaps.size(); i++){
@@ -162,13 +165,13 @@ void Scene::cameraSwitch(){
                 break;
             } 
             if(topCaps[i]->active){
-                if(topCaps[i]->momentum > maxArea){
-                    //std::cout << "topCaps[i]->momentum > maxArea" << topCaps[i]->momentum << " > " << maxArea << std::endl;
-                    maxArea = topCaps[i]->momentum;
+                if(topCaps[i]->momentum > maxMomentum){
+                    //std::cout << "topCaps[i]->momentum > maxMomentum" << topCaps[i]->momentum << " > " << maxMomentum << std::endl;
+                    maxMomentum = topCaps[i]->momentum;
                     shownCamera = topCaps[i];
                     frameToshow = topCaps[i]->frame.clone();
                 }
-                if(shownCamera == nullptr && i == topCaps.size()-1){ // Last reached without a max area
+                if(shownCamera == nullptr && i == topCaps.size()-1){ // Last reached without a max momentum: force a frame
                     frameToshow = topCaps[i]->frame.clone();
                     shownCamera = topCaps[i];
                     std::cout << "Forced" << std::endl;
@@ -179,43 +182,44 @@ void Scene::cameraSwitch(){
             topCaps[i]->condVar.notify_one();
         }
 
+
+        // Check if a stop signal has been received
         if(Capture::stopSignalReceived){
             for(auto& cap : topCaps){
                 cap->readyToRetrive = false;
                 cap->condVar.notify_one();
             }
             break;
-        } 
-
-        //CenterCamera if none camera is selected
-        if(shownCamera == nullptr){
-            std::cout << "CAMERA FORZATA" << std::endl;
-            shownCamera = topCaps[1];
-        } 
-
-        size_t sizeInBytes = frameToshow.total() * frameToshow.elemSize(); //calculate the mat size in byte
-        //Resize
-        cv::resize(frameToshow, frameToshow, cv::Size((frameToshow.cols/(double)(frameToshow.rows))*outHeight, outHeight), 0.0, 0.0, cv::INTER_AREA);
-        //Crop to out dimensions
-        frameToshow = frameToshow(cv::Range(0, outHeight), cv::Range(frameToshow.cols/2 - outWidth/2, frameToshow.cols/2 + outWidth/2));
-        // Write to the stream
-        outVideo.write(frameToshow);
-        if(displayOutput){
-            cv::namedWindow("OUT", cv::WND_PROP_OPENGL);
-            cv::setWindowProperty("OUT", cv::WND_PROP_OPENGL, cv::WINDOW_OPENGL);
-            cv::waitKey(1);
-            if(!getWindowProperty("OUT", cv::WND_PROP_VISIBLE)) displayOutput = false;
-            else cv::imshow("OUT", frameToshow);
         }
-        //std::cout << "Shown camera " << shownCamera->capName << std::endl;
+
+        // size_t sizeInBytes = frameToshow.total() * frameToshow.elemSize(); //calculate the mat size in byte
+        outputFrame(&frameToshow);
         double fps = cv::getTickFrequency()/(cv::getTickCount() - last_frame);
-        //std::cout << "FPS: " << fps << std::endl;
+        std::cout << "FPS: " << fps << std::endl;
         last_frame = cv::getTickCount();
         frameNum++;
     }
-    
+
+
+    // Join the threads
     for(auto& th : threads){
         th.join();
     }
     std::cout << "Thread join" << std::endl;
+}
+
+void Scene::outputFrame(cv::Mat* frame){
+    //Resize
+    cv::resize(*frame, *frame, cv::Size((frame->cols/(double)(frame->rows))*outHeight, outHeight), 0.0, 0.0, cv::INTER_AREA);
+    //Crop to out dimensions
+    (*frame) = (*frame)(cv::Range(0, outHeight), cv::Range(frame->cols/2 - outWidth/2, frame->cols/2 + outWidth/2));
+    // Write to the stream
+    outVideo.write(*frame);
+    if(displayOutput){
+        cv::namedWindow("OUT", cv::WND_PROP_OPENGL);
+        cv::setWindowProperty("OUT", cv::WND_PROP_OPENGL, cv::WINDOW_OPENGL);
+        cv::waitKey(1);
+        if(!getWindowProperty("OUT", cv::WND_PROP_VISIBLE)) displayOutput = false;
+        else cv::imshow("OUT", *frame);
+    }
 }
