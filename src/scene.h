@@ -36,7 +36,7 @@ private:
     int outHeight;
     bool displayOutput;
     cv::VideoWriter outVideo;
-    int sampling;
+    int smoothing;
     int readConfigFile(const std::string& configFilePath);
     void releaseCaps()const;
     void outputFrame(cv::Mat* frame);

@@ -14,7 +14,7 @@ Scene::Scene(const std::string configFilePath){
     outHeight = 1080;
     outPath = "./out/out.mp4";
     displayOutput = false;
-    sampling = 20;
+    smoothing = 20;
 
     // Reading config File
     if(readConfigFile(configFilePath)) std::cerr << "Configuration file error!";
@@ -121,7 +121,7 @@ int Scene::readConfigFile(const std::string& configFilePath){
                 if(key == "displayOutput"){
                     if(value == "true") displayOutput = true;
                 }
-                if(key == "sampling") sampling = std::stoi(value);
+                if(key == "smoothing") smoothing = std::stoi(value);
             } 
         }
         configFile.close();
@@ -195,9 +195,9 @@ void Scene::cameraSwitch(){
         //Increment the selectedFrame count
         selectedFrames[slectedCapture]++;
 
-        // Every "sampling" frames the frame to display changes: update shownCaptureIndex
+        // Every "smooth" frames, the frame to display changes: update shownCaptureIndex
         // ShownCaptureIndex is updated taking into account what has happened since the last update
-        if(frameNum % sampling == 0){
+        if(frameNum % smoothing == 0){
             shownCaptureIndex = std::distance(selectedFrames, std::max_element(selectedFrames, selectedFrames + topCaps.size()));
             std::fill(selectedFrames, selectedFrames + topCaps.size(), 0);
         }

@@ -38,7 +38,6 @@ void Capture::display(){
     unsigned int frameNum = 0;
     cv::Mat currentFrame, resized;
     while(1){
-        //std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
         if(!read(currentFrame)) break;
         if(frameNum > 2 && !getWindowProperty(capName, cv::WND_PROP_VISIBLE)) break; // close the window
         if(stopSignalReceived) break;
@@ -47,8 +46,6 @@ void Capture::display(){
         imshow(capName, resized);
         cv::waitKey(1);
         frameNum++;
-        //std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-        //std::cout << "FPS = " << 1000/(std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count()) << "[fps]" << std::endl;
     }
 }
 
@@ -90,7 +87,7 @@ void Capture::motionDetection(){
             //drawContours(originalFrame, contours, -1, cv::Scalar(0, 255, 0), 20);
             double area = getArea(contours);
             double avgVel = getAvgVelocity(currentFrame, previousFrame, contours);
-            double m = area*avgVel;
+            double m = area;
             //acquire lock
             std::unique_lock lk(mx);
             condVar.wait(lk, [this] {return !readyToRetrive;});
