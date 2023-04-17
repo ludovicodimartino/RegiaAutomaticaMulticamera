@@ -22,12 +22,14 @@ public:
     double ratio;
     bool active;
     bool readyToRetrive;
+    int cropCoords[4];
     std::mutex mx;
     std::condition_variable condVar;
     Capture(std::string _capName, std::string _source);
     friend std::ostream& operator <<(std::ostream& os, const Capture& cap);
     void display();
     void motionDetection();
+    void setCrop(const int cropArray[]);
     cv::Mat crop(const cv::Rect cropRect, const cv::Mat& uncuttedFrame)const;
     bool operator==(const Capture& cap)const;
 };

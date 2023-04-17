@@ -95,6 +95,14 @@ int Scene::readConfigFile(const std::string& configFilePath){
                 currentParsing = GENERAL;
                 continue;
             }
+            if(line == "[CROP_COORDS]"){
+                currentParsing = CROP_COORDS;
+                continue;
+            }
+            if(line[0] == '['){ //Undefined label
+                std::cerr << "Undefined label: " << line << std::endl;
+                return -1;
+            }
             std::size_t delimiterPos = line.find("="); // find the = sign
             std::string key = line.substr(0, delimiterPos); // key, before the = sign
             std::string value = line.substr(delimiterPos + 1); // value, after the = sign
@@ -109,6 +117,23 @@ int Scene::readConfigFile(const std::string& configFilePath){
             if(currentParsing == TOP_CAMERAS) topCaps.push_back(std::make_shared<Capture>(key, value));
             if(currentParsing == LATERAL_CAMERAS) lateralCaps.push_back(std::make_shared<Capture>(key, value));
         
+            // Setting crop values for analysis
+            if(currentParsing == CROP_COORDS){
+                int cropValues[4];
+                std::size_t pos = 1;
+                for(int i = 0; i < 3; i++){
+                    std::size_t nextPos = value.find(",", pos);
+                    cropValues[i] = std::stoi(value.substr(pos, nextPos-pos));
+                    pos = nextPos + 1;
+                }
+                cropValues[3] = std::stoi(value.substr(pos, value.find(")") - pos));
+                for(const auto& cap : topCaps){
+                    if(cap->capName == key){
+                        cap->setCrop(cropValues);
+                    } 
+                }
+            }
+
             // Setting output parameters
             if(currentParsing == OUT){
                 if(key == "outPath") outPath = value;

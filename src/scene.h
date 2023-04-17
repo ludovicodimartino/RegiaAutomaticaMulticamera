@@ -16,6 +16,7 @@ typedef enum CameraType{
 typedef enum ConfigFileLabels{
     TOP_CAMERAS,
     LATERAL_CAMERAS,
+    CROP_COORDS,
     GENERAL,
     OUT
 }ConfigFileLabels;

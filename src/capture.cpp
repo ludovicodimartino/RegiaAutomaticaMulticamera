@@ -16,6 +16,7 @@ Capture::Capture(std::string _capName, std::string _source) : VideoCapture(_sour
     readyToRetrive = false;
     momentum = 0;
     active = false;
+    int cropCoords[4] = {0, (int)get(cv::CAP_PROP_FRAME_WIDTH), 0, (int)get(cv::CAP_PROP_FRAME_HEIGHT)};
     ratio = get(cv::CAP_PROP_FRAME_WIDTH)/get(cv::CAP_PROP_FRAME_HEIGHT);
 }
 
@@ -32,6 +33,12 @@ bool Capture::operator==(const Capture& cap)const{
 
 cv::Mat Capture::crop(const cv::Rect cropRect, const cv::Mat& uncuttedFrame)const{
     return uncuttedFrame(cropRect).clone();
+}
+
+void Capture::setCrop(const int cropArray[]){
+    for(int i = 0; i < 4; i++){
+        cropCoords[i] = cropArray[i];
+    }
 }
 
 void Capture::display(){
@@ -60,7 +67,7 @@ void Capture::motionDetection(){
         // Copy the original frame
         currentFrame = originalFrame.clone();
         // Crop the frame in order to consider just the playground
-        currentFrame = currentFrame(cv::Range(0, originalFrame.rows), cv::Range(350, 1570));
+        currentFrame = currentFrame(cv::Range(cropCoords[0], cropCoords[1]), cv::Range(cropCoords[2], cropCoords[3]));
         
         // Check if a stop signal has arrived
         if(stopSignalReceived){
@@ -87,7 +94,7 @@ void Capture::motionDetection(){
             //drawContours(originalFrame, contours, -1, cv::Scalar(0, 255, 0), 20);
             double area = getArea(contours);
             double avgVel = getAvgVelocity(currentFrame, previousFrame, contours);
-            double m = area;
+            double m = area*avgVel;
             //acquire lock
             std::unique_lock lk(mx);
             condVar.wait(lk, [this] {return !readyToRetrive;});
