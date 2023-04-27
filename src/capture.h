@@ -7,6 +7,8 @@
 #include <mutex>
 #include <condition_variable>
 
+#define DILATE_SIZE 5
+
 class Capture : public cv::VideoCapture{
 private:
     double getArea(const std::vector<std::vector<cv::Point>>& contours)const;

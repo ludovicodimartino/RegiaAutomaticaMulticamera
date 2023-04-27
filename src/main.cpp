@@ -34,10 +34,16 @@ int main(int argc, char** argv){
     signal(SIGABRT, signalHandler);
 
     //start the camera switching or the camera display 
-    if(displayMode) scene.displayCaptures(TOP);
+    if(displayMode){
+        try{
+            scene.displayCaptures(TOP);
+        } catch(const std::exception& e){
+            std::cerr << "[DISPLAY CAPTURES ERROR]: " << e.what() << std::endl;
+        } catch(...){
+            std::cerr << "[DISPLAY CAPTURES ERROR]: Unknown error" << std::endl;
+        }
+    } 
     else scene.cameraSwitch();
-
-    //std::cout << scene << std::endl;
     return 0;
 }
 

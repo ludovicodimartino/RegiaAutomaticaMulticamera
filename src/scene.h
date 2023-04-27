@@ -6,6 +6,7 @@
 #include <string>
 #include <opencv2/opencv.hpp>
 #include <memory>
+#include <mutex>
 #include <thread>
 
 typedef enum CameraType{
@@ -38,9 +39,9 @@ private:
     bool displayOutput;
     cv::VideoWriter outVideo;
     int smoothing;
-    int readConfigFile(const std::string& configFilePath);
+    void readConfigFile(const std::string& configFilePath);
     void releaseCaps()const;
-    void outputFrame(cv::Mat* frame);
+    void outputFrame(cv::Mat* frame, double fps);
 };
 
 #endif

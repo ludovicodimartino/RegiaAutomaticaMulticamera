@@ -3,16 +3,14 @@
 #include <thread>
 #include <csignal>
 
-#define DILATE_SIZE 5
-
 Capture::Capture(std::string _capName, std::string _source) : VideoCapture(_source){
     if(!isOpened()){
-        std::cerr << "Video file opening error" << std::endl;
+        std::cerr << "[CAPTURE " << _capName << "]: Video stream opening error!" << std::endl;
         exit(1);
     }
     capName = _capName;
     source = _source;
-    processedFrameNum = -1; // frame that is being processed
+    processedFrameNum = -1; // frame number that is being processed
     readyToRetrive = false;
     momentum = 0;
     active = false;
@@ -57,9 +55,8 @@ void Capture::display(){
 }
 
 void Capture::motionDetection(){
-    std::cout << "thread ID: " << std::this_thread::get_id() << " Name: " << capName << std::endl;
+    printf("thread ID: %d Name: %s\n",std::this_thread::get_id(), capName.c_str());
     cv::Mat currentFrame, previousFrame, originalFrame, currDiffFrame;
-    // cv::Point centroid, previousCentroid;
     while(1){
         active = true;
         if(!read(originalFrame)) break;
@@ -75,7 +72,7 @@ void Capture::motionDetection(){
             break;
         }
 
-        // Processing
+        // Preprocessing
         cvtColor(currentFrame, currentFrame, cv::COLOR_BGR2GRAY); //gray scale
         GaussianBlur(currentFrame, currentFrame, cv::Size(5,5), 2); //gussian blur
         

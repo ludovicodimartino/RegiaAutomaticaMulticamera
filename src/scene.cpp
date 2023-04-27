@@ -17,7 +17,15 @@ Scene::Scene(const std::string configFilePath){
     smoothing = 20;
 
     // Reading config File
-    if(readConfigFile(configFilePath)) std::cerr << "Configuration file error!";
+    try{
+        readConfigFile(configFilePath);
+    }catch (const std::exception& e){
+        std::cerr << "[CONFIG FILE ERROR]: " << e.what() << std::endl;
+        exit(1);
+    }catch(...){
+        std::cerr << "[CONFIG FILE ERROR]: Unknown Error while reading the file!" << std::endl;
+        exit(1);
+    } 
 
     // outVideo init
     outVideo = cv::VideoWriter(outPath, cv::VideoWriter::fourcc('m','p','4','v'),25, cv::Size(outWidth,outHeight));
@@ -58,8 +66,7 @@ void Scene::displayCaptures(const int cameraType) const{
         capsToDisplay.insert( capsToDisplay.end(), lateralCaps.begin(), lateralCaps.end() );
         break;
     default:
-        throw "NOT A VALID ARGUMENT";
-        return;
+        throw std::invalid_argument("Not a valid argument");
     }
     std::vector<std::thread> threads; // Each cap is shown in a new thread
     for(auto& cap : capsToDisplay){
@@ -70,7 +77,7 @@ void Scene::displayCaptures(const int cameraType) const{
     }
 }
 
-int Scene::readConfigFile(const std::string& configFilePath){
+void Scene::readConfigFile(const std::string& configFilePath){
     ConfigFileLabels currentParsing; // What the program is parsing
     std::ifstream configFile(configFilePath);
     if (configFile.is_open()) {
@@ -100,8 +107,7 @@ int Scene::readConfigFile(const std::string& configFilePath){
                 continue;
             }
             if(line[0] == '['){ //Undefined label
-                std::cerr << "Undefined label: " << line << std::endl;
-                return -1;
+                throw std::invalid_argument("Undefined label " + line);
             }
             std::size_t delimiterPos = line.find("="); // find the = sign
             std::string key = line.substr(0, delimiterPos); // key, before the = sign
@@ -110,7 +116,7 @@ int Scene::readConfigFile(const std::string& configFilePath){
             // Check if the file exists
             if(currentParsing == TOP_CAMERAS || currentParsing == LATERAL_CAMERAS){
                 std::ifstream file(value); 
-                if(!file.good()) return -1;
+                if(!file.good()) throw std::invalid_argument("Error opening video stream " + value);
             }
 
             // Create the caps
@@ -151,8 +157,7 @@ int Scene::readConfigFile(const std::string& configFilePath){
         }
         configFile.close();
         std::cout << "Configuration read!" << std::endl;
-    } else return -1; //open file error
-    return 0;
+    } else throw std::invalid_argument("Error while opening the config file. Check the config file name and path.\n--help for help.");
 }
 
 void Scene::cameraSwitch(){
@@ -160,14 +165,14 @@ void Scene::cameraSwitch(){
     for(auto& cap : topCaps){
          threads.push_back(std::thread(&Capture::motionDetection, std::ref(*cap)));
     }
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-    std::cout << "Threads started" << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    std::cout << "Threads started\nPress Ctrl+C to stop" << std::endl;
     
-    // read captures parameters to determine which cameras are active.
     uint frameNum = 0;
     int64 last_frame;
     int selectedFrames[topCaps.size()] = { 0 }; // Save the selected frame index as if the swithing were happening every frame
     int shownCaptureIndex = 0;
+    double fps = 0;
     while(1){
         // Check if at least one camera is active
         bool atLeastOneActive = false;
@@ -203,13 +208,12 @@ void Scene::cameraSwitch(){
 
             if(topCaps[i]->active){
                 if(topCaps[i]->momentum > maxMomentum){
-                    //std::cout << "topCaps[i]->momentum > maxMomentum" << topCaps[i]->momentum << " > " << maxMomentum << std::endl;
                     maxMomentum = topCaps[i]->momentum;
                     slectedCapture = i;
                 }
                 if(slectedCapture == -1 && i == topCaps.size()-1){ // Last reached without a max momentum: force a frame
                     slectedCapture = i;
-                    std::cout << "Forced" << std::endl;
+                    //std::cout << "Forced camera" << std::endl;
                 } 
             } 
             topCaps[i]->readyToRetrive = false;
@@ -236,23 +240,31 @@ void Scene::cameraSwitch(){
             break;
         }
 
-        // size_t sizeInBytes = frameToshow.total() * frameToshow.elemSize(); //calculate the mat size in byte
-        outputFrame(&frameToshow);
-        double fps = cv::getTickFrequency()/(cv::getTickCount() - last_frame);
-        std::cout << "FPS: " << fps << std::endl;
+        //Get fps value every 15 frames
+        if(!(frameNum % 15)) fps = cv::getTickFrequency()/(cv::getTickCount() - last_frame);
+        //std::cout << "FPS: " << fps << std::endl;
         last_frame = cv::getTickCount();
+        try{
+            outputFrame(&frameToshow, fps);
+        } catch(const cv::Exception& e){
+            std::cerr << "[OUTPUT FRAME EXCEPTION]: " << e.what() << std::endl;
+            Capture::stopSignalReceived = true;
+        } catch(...){
+            std::cerr << "[OUTPUT FRAME EXCEPTION]: Unknown exception" << std::endl;
+            Capture::stopSignalReceived = true;
+        }
         frameNum++;
     }
 
-
+    std::cout << "Waiting for threads to stop..." << std::endl;
     // Join the threads
     for(auto& th : threads){
         th.join();
     }
-    std::cout << "Thread join" << std::endl;
+    std::cout << "Threads joined" << std::endl;
 }
 
-void Scene::outputFrame(cv::Mat* frame){
+void Scene::outputFrame(cv::Mat* frame, double fps){
     //Resize
     cv::resize(*frame, *frame, cv::Size((frame->cols/(double)(frame->rows))*outHeight, outHeight), 0.0, 0.0, cv::INTER_AREA);
     //Crop to out dimensions
@@ -264,6 +276,18 @@ void Scene::outputFrame(cv::Mat* frame){
         cv::setWindowProperty("OUT", cv::WND_PROP_OPENGL, cv::WINDOW_OPENGL);
         cv::waitKey(1);
         if(!getWindowProperty("OUT", cv::WND_PROP_VISIBLE)) displayOutput = false;
-        else cv::imshow("OUT", *frame);
+        else{
+            //Resize for displaying
+            cv::resize(*frame, *frame, cv::Size(0,0), 0.5, 0.5, cv::INTER_AREA);
+            //FPS LABEL
+            cv::putText(*frame, //target image
+            "FPS: " + std::to_string(fps), //text
+            cv::Point(10, 40), //top-left position
+            cv::FONT_HERSHEY_SIMPLEX,
+            1.0,
+            CV_RGB(0, 255, 0), //font color
+            2);
+            cv::imshow("OUT", *frame);
+        } 
     }
 }
