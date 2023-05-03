@@ -194,11 +194,11 @@ void Scene::cameraSwitch(){
         for(int i = 0; i < topCaps.size(); i++){
             // Wait for the processed frame to be ready for this thread
             std::unique_lock lk(topCaps[i]->mx);
-            topCaps[i]->condVar.wait(lk, [&] {return topCaps[i]->readyToRetrive;});
+            topCaps[i]->condVar.wait(lk, [&] {return topCaps[i]->readyToRetrieve;});
 
             // Stop signal received
             if(Capture::stopSignalReceived){
-                topCaps[i]->readyToRetrive = false;
+                topCaps[i]->readyToRetrieve = false;
                 lk.unlock();
                 topCaps[i]->condVar.notify_one();
                 break;
@@ -216,7 +216,7 @@ void Scene::cameraSwitch(){
                     //std::cout << "Forced camera" << std::endl;
                 } 
             } 
-            topCaps[i]->readyToRetrive = false;
+            topCaps[i]->readyToRetrieve = false;
             lk.unlock();
             topCaps[i]->condVar.notify_one();
         }
@@ -234,7 +234,7 @@ void Scene::cameraSwitch(){
         // Check if a stop signal has been received
         if(Capture::stopSignalReceived){
             for(auto& cap : topCaps){
-                cap->readyToRetrive = false;
+                cap->readyToRetrieve = false;
                 cap->condVar.notify_one();
             }
             break;

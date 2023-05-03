@@ -11,7 +11,7 @@ Capture::Capture(std::string _capName, std::string _source) : VideoCapture(_sour
     capName = _capName;
     source = _source;
     processedFrameNum = -1; // frame number that is being processed
-    readyToRetrive = false;
+    readyToRetrieve = false;
     momentum = 0;
     active = false;
     int cropCoords[4] = {0, (int)get(cv::CAP_PROP_FRAME_WIDTH), 0, (int)get(cv::CAP_PROP_FRAME_HEIGHT)};
@@ -27,10 +27,6 @@ std::ostream& operator <<(std::ostream& os, const Capture& cap){
 
 bool Capture::operator==(const Capture& cap)const{
     return capName == cap.capName;
-}
-
-cv::Mat Capture::crop(const cv::Rect cropRect, const cv::Mat& uncuttedFrame)const{
-    return uncuttedFrame(cropRect).clone();
 }
 
 void Capture::setCrop(const int cropArray[]){
@@ -68,7 +64,7 @@ void Capture::motionDetection(){
         
         // Check if a stop signal has arrived
         if(stopSignalReceived){
-            readyToRetrive = true;
+            readyToRetrieve = true;
             break;
         }
 
@@ -94,11 +90,11 @@ void Capture::motionDetection(){
             double m = area*avgVel;
             //acquire lock
             std::unique_lock lk(mx);
-            condVar.wait(lk, [this] {return !readyToRetrive;});
+            condVar.wait(lk, [this] {return !readyToRetrieve;});
             momentum = m; // update the area
             frame.release();
             frame = originalFrame.clone(); // update the frame
-            readyToRetrive = true;
+            readyToRetrieve = true;
             // Unlock and notify
             lk.unlock();
             condVar.notify_one();  
