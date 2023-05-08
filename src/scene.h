@@ -18,6 +18,7 @@ typedef enum ConfigFileLabels{
     TOP_CAMERAS,
     LATERAL_CAMERAS,
     CROP_COORDS,
+    WEIGHTS,
     GENERAL,
     OUT
 }ConfigFileLabels;

@@ -106,6 +106,10 @@ void Scene::readConfigFile(const std::string& configFilePath){
                 currentParsing = CROP_COORDS;
                 continue;
             }
+            if(line == "[WEIGHTS]"){
+                currentParsing = WEIGHTS;
+                continue;
+            }
             if(line[0] == '['){ //Undefined label
                 throw std::invalid_argument("Undefined label " + line);
             }
@@ -138,6 +142,13 @@ void Scene::readConfigFile(const std::string& configFilePath){
                         cap->setCrop(cropValues);
                     } 
                 }
+            }
+
+            if(currentParsing == WEIGHTS){
+                //Check if in range
+                const int w = std::stoi(value);
+                if(w < 1 || w > 5) throw std::invalid_argument("The weight value '" + value + "' in '" + line + "' is not included in the [1-5] interval");
+                for(const auto& cap : topCaps) if(cap->capName == key) cap->setWeight(w);
             }
 
             // Setting output parameters

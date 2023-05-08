@@ -14,6 +14,7 @@ Capture::Capture(std::string _capName, std::string _source) : VideoCapture(_sour
     readyToRetrieve = false;
     momentum = 0;
     active = false;
+    weight = 1;
     int cropCoords[4] = {0, (int)get(cv::CAP_PROP_FRAME_WIDTH), 0, (int)get(cv::CAP_PROP_FRAME_HEIGHT)};
     ratio = get(cv::CAP_PROP_FRAME_WIDTH)/get(cv::CAP_PROP_FRAME_HEIGHT);
 }
@@ -33,6 +34,10 @@ void Capture::setCrop(const int cropArray[]){
     for(int i = 0; i < 4; i++){
         cropCoords[i] = cropArray[i];
     }
+}
+
+void Capture::setWeight(const int w){
+    weight = w;
 }
 
 void Capture::display(){
@@ -87,7 +92,7 @@ void Capture::motionDetection(){
             //drawContours(originalFrame, contours, -1, cv::Scalar(0, 255, 0), 20);
             double area = getArea(contours);
             double avgVel = getAvgVelocity(currentFrame, previousFrame, contours);
-            double m = area*avgVel;
+            double m = area*avgVel*weight; // calculate the weighted momentum
             //acquire lock
             std::unique_lock lk(mx);
             condVar.wait(lk, [this] {return !readyToRetrieve;});

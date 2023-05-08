@@ -14,6 +14,7 @@ private:
     unsigned int processedFrameNum;
     double ratio;
     int cropCoords[4];
+    int weight;
     double getArea(const std::vector<std::vector<cv::Point>>& contours)const;
     double getAvgVelocity(const cv::Mat& currFrameGray, const cv::Mat& prevFrameGray, const std::vector<std::vector<cv::Point>>& contours);
 
@@ -32,6 +33,7 @@ public:
     void display();
     void motionDetection();
     void setCrop(const int cropArray[]);
+    void setWeight(const int w);
     bool operator==(const Capture& cap)const;
 };
 #endif
