@@ -7,7 +7,7 @@
 #include <mutex>
 #include <condition_variable>
 
-#define DILATE_SIZE 5
+#define DILATE_SIZE 3
 
 class Capture : public cv::VideoCapture{
 private:
@@ -15,8 +15,11 @@ private:
     double ratio;
     int cropCoords[4];
     int weight;
+    std::map<std::string, std::string> paramToDisplay;
+    bool isdisplayAnalysis;
     double getArea(const std::vector<std::vector<cv::Point>>& contours)const;
     double getAvgVelocity(const cv::Mat& currFrameGray, const cv::Mat& prevFrameGray, const std::vector<std::vector<cv::Point>>& contours);
+    void displayAnalysis(const cv::Mat& diffFrame, const cv::Mat& croppedFrame, const std::vector<std::vector<cv::Point>>& contours, const double area, const double avgVel);
 
 public:
     static bool stopSignalReceived;
@@ -34,6 +37,7 @@ public:
     void motionDetection();
     void setCrop(const int cropArray[]);
     void setWeight(const int w);
+    void setDisplayAnalysis(const bool da);
     bool operator==(const Capture& cap)const;
 };
 #endif

@@ -110,6 +110,10 @@ void Scene::readConfigFile(const std::string& configFilePath){
                 currentParsing = WEIGHTS;
                 continue;
             }
+            if(line == "[DISPLAY_ANALYSIS]"){
+                currentParsing = DISPLAY_ANALYSIS;
+                continue;
+            }
             if(line[0] == '['){ //Undefined label
                 throw std::invalid_argument("Undefined label " + line);
             }
@@ -151,6 +155,10 @@ void Scene::readConfigFile(const std::string& configFilePath){
                 for(const auto& cap : topCaps) if(cap->capName == key) cap->setWeight(w);
             }
 
+            if(currentParsing == DISPLAY_ANALYSIS){
+                for(const auto& cap : topCaps) if(cap->capName == key && value == "true") cap->setDisplayAnalysis(true);
+            }
+
             // Setting output parameters
             if(currentParsing == OUT){
                 if(key == "outPath") outPath = value;
@@ -160,9 +168,7 @@ void Scene::readConfigFile(const std::string& configFilePath){
 
             //Setting general parameters
             if(currentParsing == GENERAL){
-                if(key == "displayOutput"){
-                    if(value == "true") displayOutput = true;
-                }
+                if(key == "displayOutput" && value == "true") displayOutput = true;
                 if(key == "smoothing") smoothing = std::stoi(value);
             } 
         }
@@ -203,33 +209,39 @@ void Scene::cameraSwitch(){
         
         
         for(int i = 0; i < topCaps.size(); i++){
-            // Wait for the processed frame to be ready for this thread
-            std::unique_lock lk(topCaps[i]->mx);
-            topCaps[i]->condVar.wait(lk, [&] {return topCaps[i]->readyToRetrieve;});
+            if(topCaps[i]->active){
+                // Wait for the processed frame to be ready for this thread
+                std::unique_lock lk(topCaps[i]->mx);
+                topCaps[i]->condVar.wait(lk, [&] {return (topCaps[i]->readyToRetrieve | !topCaps[i]->active);});
+                // Stop signal received
+                if(Capture::stopSignalReceived){
+                    topCaps[i]->readyToRetrieve = false;
+                    lk.unlock();
+                    topCaps[i]->condVar.notify_one();
+                    break;
+                } 
 
-            // Stop signal received
-            if(Capture::stopSignalReceived){
+
+                if(topCaps[i]->active){
+                    if(topCaps[i]->momentum > maxMomentum){
+                        maxMomentum = topCaps[i]->momentum;
+                        slectedCapture = i;
+                    }
+                    if(slectedCapture == -1 && i == topCaps.size()-1){ // Last reached without a max momentum: force a frame
+                        slectedCapture = i;
+                        //std::cout << "Forced camera" << std::endl;
+                    } 
+                    
+                } 
+
+                // Copy the frame to show
+                if(i == shownCaptureIndex) frameToshow = topCaps[i]->frame.clone();
+
                 topCaps[i]->readyToRetrieve = false;
                 lk.unlock();
                 topCaps[i]->condVar.notify_one();
-                break;
-            } 
-
-            if(i == shownCaptureIndex) frameToshow = topCaps[i]->frame.clone();
-
-            if(topCaps[i]->active){
-                if(topCaps[i]->momentum > maxMomentum){
-                    maxMomentum = topCaps[i]->momentum;
-                    slectedCapture = i;
-                }
-                if(slectedCapture == -1 && i == topCaps.size()-1){ // Last reached without a max momentum: force a frame
-                    slectedCapture = i;
-                    //std::cout << "Forced camera" << std::endl;
-                } 
-            } 
-            topCaps[i]->readyToRetrieve = false;
-            lk.unlock();
-            topCaps[i]->condVar.notify_one();
+            }
+            
         }
 
         //Increment the selectedFrame count
@@ -253,10 +265,10 @@ void Scene::cameraSwitch(){
 
         //Get fps value every 15 frames
         if(!(frameNum % 15)) fps = cv::getTickFrequency()/(cv::getTickCount() - last_frame);
-        //std::cout << "FPS: " << fps << std::endl;
         last_frame = cv::getTickCount();
+
         try{
-            outputFrame(&frameToshow, fps);
+            if(!frameToshow.empty())outputFrame(&frameToshow, fps);
         } catch(const cv::Exception& e){
             std::cerr << "[OUTPUT FRAME EXCEPTION]: " << e.what() << std::endl;
             Capture::stopSignalReceived = true;
@@ -289,7 +301,7 @@ void Scene::outputFrame(cv::Mat* frame, double fps){
         if(!getWindowProperty("OUT", cv::WND_PROP_VISIBLE)) displayOutput = false;
         else{
             //Resize for displaying
-            cv::resize(*frame, *frame, cv::Size(0,0), 0.5, 0.5, cv::INTER_AREA);
+            cv::resize(*frame, *frame, cv::Size(1200,(frame->rows/(double)frame->cols)*1200));
             //FPS LABEL
             cv::putText(*frame, //target image
             "FPS: " + std::to_string(fps), //text

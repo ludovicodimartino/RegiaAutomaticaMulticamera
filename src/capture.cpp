@@ -12,9 +12,12 @@ Capture::Capture(std::string _capName, std::string _source) : VideoCapture(_sour
     source = _source;
     processedFrameNum = -1; // frame number that is being processed
     readyToRetrieve = false;
+    isdisplayAnalysis = false;
     momentum = 0;
     active = false;
     weight = 1;
+    paramToDisplay = {{"WEIGHTED_MOMENTUM", "0"}, {"AREAS_NUM", "0"}, {"WEIGHT", std::to_string(weight)},
+                      {"AVG_VELOCITY", "0"}, {"AREA", "0"}};
     int cropCoords[4] = {0, (int)get(cv::CAP_PROP_FRAME_WIDTH), 0, (int)get(cv::CAP_PROP_FRAME_HEIGHT)};
     ratio = get(cv::CAP_PROP_FRAME_WIDTH)/get(cv::CAP_PROP_FRAME_HEIGHT);
 }
@@ -40,6 +43,10 @@ void Capture::setWeight(const int w){
     weight = w;
 }
 
+void Capture::setDisplayAnalysis(const bool da){
+    isdisplayAnalysis = da;
+}
+
 void Capture::display(){
     unsigned int frameNum = 0;
     cv::Mat currentFrame, resized;
@@ -57,15 +64,18 @@ void Capture::display(){
 
 void Capture::motionDetection(){
     printf("thread ID: %d Name: %s\n",std::this_thread::get_id(), capName.c_str());
-    cv::Mat currentFrame, previousFrame, originalFrame, currDiffFrame;
-    while(1){
+    cv::Mat croppedFrame, previousFrame, originalFrame, currDiffFrame;
+    while(isOpened()){
         active = true;
-        if(!read(originalFrame)) break;
+        if(!read(originalFrame))break;
         
         // Copy the original frame
-        currentFrame = originalFrame.clone();
+        croppedFrame = originalFrame.clone();
         // Crop the frame in order to consider just the playground
-        currentFrame = currentFrame(cv::Range(cropCoords[0], cropCoords[1]), cv::Range(cropCoords[2], cropCoords[3]));
+        croppedFrame = croppedFrame(cv::Range(cropCoords[0], cropCoords[1]), cv::Range(cropCoords[2], cropCoords[3]));
+
+        //Resize the frame for faster analysis
+        //cv::resize(croppedFrame, croppedFrame, cv::Size(100, (croppedFrame.rows/(double)croppedFrame.cols)*100));
         
         // Check if a stop signal has arrived
         if(stopSignalReceived){
@@ -74,11 +84,11 @@ void Capture::motionDetection(){
         }
 
         // Preprocessing
-        cvtColor(currentFrame, currentFrame, cv::COLOR_BGR2GRAY); //gray scale
-        GaussianBlur(currentFrame, currentFrame, cv::Size(5,5), 2); //gussian blur
+        cvtColor(croppedFrame, croppedFrame, cv::COLOR_BGR2GRAY); //gray scale
+        GaussianBlur(croppedFrame, croppedFrame, cv::Size(5,5), 0.5); //gussian blur
         
         if(processedFrameNum + 1) {
-            absdiff(previousFrame, currentFrame, currDiffFrame);
+            absdiff(previousFrame, croppedFrame, currDiffFrame);
             // make the areas bigger
             dilate(currDiffFrame, currDiffFrame, cv::getStructuringElement( cv::MORPH_ELLIPSE,
                        cv::Size( DILATE_SIZE*DILATE_SIZE + 1, DILATE_SIZE*DILATE_SIZE+1 ),
@@ -89,30 +99,32 @@ void Capture::motionDetection(){
             //GET MOMENTUM
             std::vector<std::vector<cv::Point>> contours;
             findContours(currDiffFrame, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-            //drawContours(originalFrame, contours, -1, cv::Scalar(0, 255, 0), 20);
             double area = getArea(contours);
-            double avgVel = getAvgVelocity(currentFrame, previousFrame, contours);
+            double avgVel = getAvgVelocity(croppedFrame, previousFrame, contours);
             double m = area*avgVel*weight; // calculate the weighted momentum
             //acquire lock
             std::unique_lock lk(mx);
             condVar.wait(lk, [this] {return !readyToRetrieve;});
-            momentum = m; // update the area
+            
+            momentum = m; // update the momentum
+            if(isdisplayAnalysis) displayAnalysis(currDiffFrame, croppedFrame, contours, area, avgVel); 
             frame.release();
             frame = originalFrame.clone(); // update the frame
             readyToRetrieve = true;
             // Unlock and notify
             lk.unlock();
-            condVar.notify_one();  
+            condVar.notify_one();
         }
 
         previousFrame.release();
-        previousFrame = currentFrame.clone(); // Save the previous frame
-        currentFrame.release();
+        previousFrame = croppedFrame.clone(); // Save the previous frame
+        croppedFrame.release();
         currDiffFrame.release();
         originalFrame.release();
         ++processedFrameNum;
     }
     active = false;
+    condVar.notify_one(); // To unlock the scene while loop
 }
 
 double Capture::getArea(const std::vector<std::vector<cv::Point>>& contours)const{
@@ -162,4 +174,41 @@ double Capture::getAvgVelocity(const cv::Mat& currFrameGray, const cv::Mat& prev
         }
     }
     return (velocitySum/good)*100; // *100 to avoid sub 1 values
+}
+
+void Capture::displayAnalysis(const cv::Mat& diffFrame, const cv::Mat& croppedFrame, const std::vector<std::vector<cv::Point>>& contours, const double area, const double avgVel){
+    std::string winName = capName + " ANALYSIS - for DEBUGGING purposes ONLY";
+    cv::namedWindow(winName, cv::WND_PROP_OPENGL);
+    cv::setWindowProperty(winName, cv::WND_PROP_OPENGL, cv::WINDOW_OPENGL);
+    cv::waitKey(1);
+    if(!getWindowProperty(winName, cv::WND_PROP_VISIBLE)) isdisplayAnalysis = false;
+    else{
+        
+        // Concatenate the two frames 
+        cv::Mat out;
+        cv::hconcat(croppedFrame, diffFrame, out);
+        cv::cvtColor(out, out, cv::COLOR_GRAY2BGR);
+        drawContours(out, contours, -1, cv::Scalar(0, 255, 0), 1);
+        cv::resize(out, out, cv::Size(1200, (out.rows/(double)out.cols)*1200));
+
+        //Update values to display every 15 frames -> so you can read
+        if(!(processedFrameNum%15)){
+            paramToDisplay["WEIGHTED_MOMENTUM"] = std::to_string((int)std::floor(momentum));
+            paramToDisplay["AREAS_NUM"] = std::to_string((int)contours.size());
+            paramToDisplay["AVG_VELOCITY"] = std::to_string((int)avgVel);
+            paramToDisplay["AREA"] = std::to_string((int)area);
+        }
+        // Insert some labels
+        int i = 0;
+        for(const auto& [key, val] : paramToDisplay){
+            cv::putText(out, //target image
+                key + ": " + val, //text
+                cv::Point(5, 15*(1 + i++)), //top-left position
+                cv::FONT_HERSHEY_PLAIN,
+                1.0,
+                CV_RGB(0, 255, 0), //font color
+                1);
+        }
+        cv::imshow(winName, out);
+    }
 }
