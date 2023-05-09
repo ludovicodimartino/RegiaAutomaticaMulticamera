@@ -15,6 +15,7 @@ Scene::Scene(const std::string configFilePath){
     outPath = "./out/out.mp4";
     displayOutput = false;
     smoothing = 20;
+    fpsToFile = false;
 
     // Reading config File
     try{
@@ -27,11 +28,20 @@ Scene::Scene(const std::string configFilePath){
         exit(1);
     } 
 
+    // Open fps file if the fpsToFile is true in the config file
+    if(fpsToFile){
+        fpsStream.open("../out/FPS.csv");
+        if(!fpsStream.is_open()){
+            std::cerr << "[FPS FILE OPENING ERROR]" << std::endl;
+            exit(1);
+        }
+    }
     // outVideo init
     outVideo = cv::VideoWriter(outPath, cv::VideoWriter::fourcc('m','p','4','v'),25, cv::Size(outWidth,outHeight));
 }
 
 Scene::~Scene(){
+    if(fpsToFile) fpsStream.close();
     releaseCaps();
     outVideo.release();
     cv::destroyAllWindows();
@@ -170,6 +180,7 @@ void Scene::readConfigFile(const std::string& configFilePath){
             if(currentParsing == GENERAL){
                 if(key == "displayOutput" && value == "true") displayOutput = true;
                 if(key == "smoothing") smoothing = std::stoi(value);
+                if(key == "fpsToFile") fpsToFile = true;
             } 
         }
         configFile.close();
@@ -189,7 +200,7 @@ void Scene::cameraSwitch(){
     int64 last_frame;
     int selectedFrames[topCaps.size()] = { 0 }; // Save the selected frame index as if the swithing were happening every frame
     int shownCaptureIndex = 0;
-    double fps = 0;
+    double fpsToDisplay = 0, fps = 0;
     while(1){
         // Check if at least one camera is active
         bool atLeastOneActive = false;
@@ -212,7 +223,7 @@ void Scene::cameraSwitch(){
             if(topCaps[i]->active){
                 // Wait for the processed frame to be ready for this thread
                 std::unique_lock lk(topCaps[i]->mx);
-                topCaps[i]->condVar.wait(lk, [&] {return (topCaps[i]->readyToRetrieve | !topCaps[i]->active);});
+                topCaps[i]->condVar.wait(lk, [&] {return (topCaps[i]->readyToRetrieve || !topCaps[i]->active);});
                 // Stop signal received
                 if(Capture::stopSignalReceived){
                     topCaps[i]->readyToRetrieve = false;
@@ -263,12 +274,16 @@ void Scene::cameraSwitch(){
             break;
         }
 
-        //Get fps value every 15 frames
-        if(!(frameNum % 15)) fps = cv::getTickFrequency()/(cv::getTickCount() - last_frame);
+        //Calculate the fps
+        fps = cv::getTickFrequency()/(cv::getTickCount() - last_frame);
         last_frame = cv::getTickCount();
+        //Update fpsToDisplay every 15 frames
+        if(!(frameNum % 15)) fpsToDisplay = fps;
+        fpsStream << std::to_string((int)std::floor(fps)) + "\n";
 
+        //Output frame 
         try{
-            if(!frameToshow.empty())outputFrame(&frameToshow, fps);
+            if(!frameToshow.empty())outputFrame(&frameToshow, fpsToDisplay);
         } catch(const cv::Exception& e){
             std::cerr << "[OUTPUT FRAME EXCEPTION]: " << e.what() << std::endl;
             Capture::stopSignalReceived = true;

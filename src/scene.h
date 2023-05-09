@@ -3,6 +3,7 @@
 
 #include "capture.h"
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <opencv2/opencv.hpp>
 #include <memory>
@@ -41,6 +42,8 @@ private:
     bool displayOutput;
     cv::VideoWriter outVideo;
     int smoothing;
+    bool fpsToFile;
+    std::ofstream fpsStream;
     void readConfigFile(const std::string& configFilePath);
     void releaseCaps()const;
     void outputFrame(cv::Mat* frame, double fps);
