@@ -15,16 +15,6 @@ typedef enum CameraType{
     LATERAL = 2
 }CameraType;
 
-typedef enum ConfigFileLabels{
-    TOP_CAMERAS,
-    LATERAL_CAMERAS,
-    CROP_COORDS,
-    WEIGHTS,
-    DISPLAY_ANALYSIS,
-    GENERAL,
-    OUT
-}ConfigFileLabels;
-
 class Scene{
 public:
     Scene(const std::string configFilePath);
@@ -43,10 +33,11 @@ private:
     cv::VideoWriter outVideo;
     int smoothing;
     bool fpsToFile;
+    std::string fpsFilePath;
     std::ofstream fpsStream;
     void readConfigFile(const std::string& configFilePath);
     void releaseCaps()const;
-    void outputFrame(cv::Mat* frame, double fps);
+    void outputFrame(cv::Mat* frame, int fps);
 };
 
 #endif

@@ -13,16 +13,18 @@ Capture::Capture(std::string _capName, std::string _source) : VideoCapture(_sour
     processedFrameNum = -1; // frame number that is being processed
     readyToRetrieve = false;
     isdisplayAnalysis = false;
-    momentum = 0;
+    score = 0;
     active = false;
     weight = 1;
-    paramToDisplay = {{"WEIGHTED_MOMENTUM", "0"}, {"AREAS_NUM", "0"}, {"WEIGHT", std::to_string(weight)},
+    paramToDisplay = {{"FINAL_SCORE", "0"}, {"AREAS_NUM", "0"}, {"WEIGHT", std::to_string(weight)},
                       {"AVG_VELOCITY", "0"}, {"AREA", "0"}};
     int cropCoords[4] = {0, (int)get(cv::CAP_PROP_FRAME_WIDTH), 0, (int)get(cv::CAP_PROP_FRAME_HEIGHT)};
     ratio = get(cv::CAP_PROP_FRAME_WIDTH)/get(cv::CAP_PROP_FRAME_HEIGHT);
+
 }
 
 bool Capture::stopSignalReceived = false;
+double Capture::alpha = 0;
 
 std::ostream& operator <<(std::ostream& os, const Capture& cap){
     os << "CAPTURE NAME: " << cap.capName << " CAPTURE PATH: " << cap.source << " RATIO: " << cap.ratio;
@@ -96,17 +98,23 @@ void Capture::motionDetection(){
             //Threshold (black and white)
             threshold(currDiffFrame, currDiffFrame, 20, 255, cv::THRESH_BINARY);
         
-            //GET MOMENTUM
+            //Calculate the score of the frame
             std::vector<std::vector<cv::Point>> contours;
             findContours(currDiffFrame, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-            double area = getArea(contours);
-            double avgVel = getAvgVelocity(croppedFrame, previousFrame, contours);
-            double m = area*avgVel*weight; // calculate the weighted momentum
+            double area = 0, avgVel = 0, s = 0;
+            //Check whether contours.size is greater than 0 before performing the calculation
+            if(contours.size() > 0){
+                area = getArea(contours);
+                avgVel = getAvgVelocity(croppedFrame, previousFrame, contours);
+                double nalpha = std::pow(contours.size(), alpha); // n to the power of alpha
+                s = area*avgVel*weight*nalpha; // calculate the weighted score
+            }
+
             //acquire lock
             std::unique_lock lk(mx);
             condVar.wait(lk, [this] {return !readyToRetrieve;});
             
-            momentum = m; // update the momentum
+            score = s; // update the score
             if(isdisplayAnalysis) displayAnalysis(currDiffFrame, croppedFrame, contours, area, avgVel); 
             frame.release();
             frame = originalFrame.clone(); // update the frame
@@ -193,7 +201,7 @@ void Capture::displayAnalysis(const cv::Mat& diffFrame, const cv::Mat& croppedFr
 
         //Update values to display every 15 frames -> so you can read
         if(!(processedFrameNum%15)){
-            paramToDisplay["WEIGHTED_MOMENTUM"] = std::to_string((int)std::floor(momentum));
+            paramToDisplay["FINAL_SCORE"] = std::to_string((int)std::floor(score));
             paramToDisplay["AREAS_NUM"] = std::to_string((int)contours.size());
             paramToDisplay["AVG_VELOCITY"] = std::to_string((int)avgVel);
             paramToDisplay["AREA"] = std::to_string((int)area);
@@ -203,12 +211,15 @@ void Capture::displayAnalysis(const cv::Mat& diffFrame, const cv::Mat& croppedFr
         for(const auto& [key, val] : paramToDisplay){
             cv::putText(out, //target image
                 key + ": " + val, //text
-                cv::Point(5, 15*(1 + i++)), //top-left position
+                cv::Point(5, 30*(1 + i++)), //top-left position
                 cv::FONT_HERSHEY_PLAIN,
-                1.0,
-                CV_RGB(0, 255, 0), //font color
+                1.5,
+                CV_RGB(0, 0, 255), //font color
                 1);
         }
+        //DA RIMUOVERE
+        if(processedFrameNum == 0)analysisOut = cv::VideoWriter("../out/" + capName + "_Analysis.mp4", cv::VideoWriter::fourcc('m','p','4','v'),25, cv::Size(out.cols, out.rows));
+        analysisOut.write(out);
         cv::imshow(winName, out);
     }
 }

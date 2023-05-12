@@ -16,6 +16,7 @@ Scene::Scene(const std::string configFilePath){
     displayOutput = false;
     smoothing = 20;
     fpsToFile = false;
+    fpsFilePath = "../out/FPS.csv";
 
     // Reading config File
     try{
@@ -30,11 +31,12 @@ Scene::Scene(const std::string configFilePath){
 
     // Open fps file if the fpsToFile is true in the config file
     if(fpsToFile){
-        fpsStream.open("../out/FPS.csv");
+        fpsStream.open(fpsFilePath, std::ofstream::out | std::ofstream::trunc);
         if(!fpsStream.is_open()){
             std::cerr << "[FPS FILE OPENING ERROR]" << std::endl;
             exit(1);
         }
+        fpsStream << "fps"; // Insert top label in the file
     }
     // outVideo init
     outVideo = cv::VideoWriter(outPath, cv::VideoWriter::fourcc('m','p','4','v'),25, cv::Size(outWidth,outHeight));
@@ -88,7 +90,10 @@ void Scene::displayCaptures(const int cameraType) const{
 }
 
 void Scene::readConfigFile(const std::string& configFilePath){
-    ConfigFileLabels currentParsing; // What the program is parsing
+    std::string_view currentParsing; // What the program is parsing
+    const std::vector<std::string_view> configFileLabels = {"[TOP_CAMERAS]", "[LATERAL_CAMERAS]", "[OUT]", 
+                                                            "[GENERAL]", "[CROP_COORDS]", "[WEIGHTS]", 
+                                                            "[DISPLAY_ANALYSIS]"}; 
     std::ifstream configFile(configFilePath);
     if (configFile.is_open()) {
         std::cout << "Reading configuration file..." << std::endl;
@@ -96,53 +101,36 @@ void Scene::readConfigFile(const std::string& configFilePath){
         while (std::getline(configFile, line)) { // read the configFile line by line 
             line.erase(std::remove_if(line.begin(), line.end(), isspace),line.end()); // Erasing the spaces
             if(line[0] == '#' || line.empty()) continue; // Skip empty line or comments
-            if(line == "[TOP_CAMERAS]"){
-                currentParsing = TOP_CAMERAS;
-                continue;
+            
+            if(line[0] == '['){ //It's a label
+                bool found = false;
+                for (const auto& label : configFileLabels){
+                    if(line == label){
+                        currentParsing = label;
+                        found = true;
+                        break;
+                    }
+                }
+                if(found)continue;
+                else throw std::invalid_argument("Undefined label " + line); //Undefined label
             }
-            if(line == "[LATERAL_CAMERAS]"){
-                currentParsing = LATERAL_CAMERAS;
-                continue;
-            }
-            if(line == "[OUT]"){
-                currentParsing = OUT;
-                continue;
-            }
-            if(line == "[GENERAL]"){
-                currentParsing = GENERAL;
-                continue;
-            }
-            if(line == "[CROP_COORDS]"){
-                currentParsing = CROP_COORDS;
-                continue;
-            }
-            if(line == "[WEIGHTS]"){
-                currentParsing = WEIGHTS;
-                continue;
-            }
-            if(line == "[DISPLAY_ANALYSIS]"){
-                currentParsing = DISPLAY_ANALYSIS;
-                continue;
-            }
-            if(line[0] == '['){ //Undefined label
-                throw std::invalid_argument("Undefined label " + line);
-            }
+        
             std::size_t delimiterPos = line.find("="); // find the = sign
             std::string key = line.substr(0, delimiterPos); // key, before the = sign
             std::string value = line.substr(delimiterPos + 1); // value, after the = sign
             
             // Check if the file exists
-            if(currentParsing == TOP_CAMERAS || currentParsing == LATERAL_CAMERAS){
+            if(currentParsing == "[TOP_CAMERAS]" || currentParsing == "[LATERAL_CAMERAS]"){
                 std::ifstream file(value); 
                 if(!file.good()) throw std::invalid_argument("Error opening video stream " + value);
             }
 
             // Create the caps
-            if(currentParsing == TOP_CAMERAS) topCaps.push_back(std::make_shared<Capture>(key, value));
-            if(currentParsing == LATERAL_CAMERAS) lateralCaps.push_back(std::make_shared<Capture>(key, value));
+            if(currentParsing == "[TOP_CAMERAS]") topCaps.push_back(std::make_shared<Capture>(key, value));
+            if(currentParsing == "[LATERAL_CAMERAS]") lateralCaps.push_back(std::make_shared<Capture>(key, value));
         
             // Setting crop values for analysis
-            if(currentParsing == CROP_COORDS){
+            if(currentParsing == "[CROP_COORDS]"){
                 int cropValues[4];
                 std::size_t pos = 1;
                 for(int i = 0; i < 3; i++){
@@ -156,31 +144,42 @@ void Scene::readConfigFile(const std::string& configFilePath){
                         cap->setCrop(cropValues);
                     } 
                 }
+                continue;
             }
 
-            if(currentParsing == WEIGHTS){
+            if(currentParsing == "[WEIGHTS]"){
                 //Check if in range
                 const int w = std::stoi(value);
                 if(w < 1 || w > 5) throw std::invalid_argument("The weight value '" + value + "' in '" + line + "' is not included in the [1-5] interval");
                 for(const auto& cap : topCaps) if(cap->capName == key) cap->setWeight(w);
+                continue;
             }
 
-            if(currentParsing == DISPLAY_ANALYSIS){
+            if(currentParsing == "[DISPLAY_ANALYSIS]"){
                 for(const auto& cap : topCaps) if(cap->capName == key && value == "true") cap->setDisplayAnalysis(true);
+                continue;
             }
 
             // Setting output parameters
-            if(currentParsing == OUT){
+            if(currentParsing == "[OUT]"){
                 if(key == "outPath") outPath = value;
                 if(key == "width") outWidth = std::stoi(value);
                 if(key == "height") outHeight = std::stoi(value);
+                continue;
             }
 
             //Setting general parameters
-            if(currentParsing == GENERAL){
+            if(currentParsing == "[GENERAL]"){
                 if(key == "displayOutput" && value == "true") displayOutput = true;
                 if(key == "smoothing") smoothing = std::stoi(value);
                 if(key == "fpsToFile") fpsToFile = true;
+                if(key == "fpsFilePath") fpsFilePath = value;
+                if(key == "alpha"){
+                    double a = std::stod(value);
+                    if(a <= -1 || a >= 1) throw std::invalid_argument("The alpha value '" + value + "' in '" + line + "' is not included in the ]-1,1[ interval");
+                    else Capture::alpha = a;
+                } 
+                continue;
             } 
         }
         configFile.close();
@@ -200,7 +199,7 @@ void Scene::cameraSwitch(){
     int64 last_frame;
     int selectedFrames[topCaps.size()] = { 0 }; // Save the selected frame index as if the swithing were happening every frame
     int shownCaptureIndex = 0;
-    double fpsToDisplay = 0, fps = 0;
+    int fpsToDisplay = 0, fps = 0;
     while(1){
         // Check if at least one camera is active
         bool atLeastOneActive = false;
@@ -213,7 +212,7 @@ void Scene::cameraSwitch(){
         if(!atLeastOneActive) break;
 
 
-        // Select the frame to show based on the frame that has the max momentum.
+        // Select the frame to show based on the frame that has the max score.
         double maxMomentum = 0;
         int slectedCapture = -1;
         cv::Mat frameToshow;
@@ -234,11 +233,11 @@ void Scene::cameraSwitch(){
 
 
                 if(topCaps[i]->active){
-                    if(topCaps[i]->momentum > maxMomentum){
-                        maxMomentum = topCaps[i]->momentum;
+                    if(topCaps[i]->score > maxMomentum){
+                        maxMomentum = topCaps[i]->score;
                         slectedCapture = i;
                     }
-                    if(slectedCapture == -1 && i == topCaps.size()-1){ // Last reached without a max momentum: force a frame
+                    if(slectedCapture == -1 && i == topCaps.size()-1){ // Last reached without a max score: force a frame
                         slectedCapture = i;
                         //std::cout << "Forced camera" << std::endl;
                     } 
@@ -275,11 +274,11 @@ void Scene::cameraSwitch(){
         }
 
         //Calculate the fps
-        fps = cv::getTickFrequency()/(cv::getTickCount() - last_frame);
+        fps = (int)std::floor(cv::getTickFrequency()/(cv::getTickCount() - last_frame));
         last_frame = cv::getTickCount();
         //Update fpsToDisplay every 15 frames
         if(!(frameNum % 15)) fpsToDisplay = fps;
-        fpsStream << std::to_string((int)std::floor(fps)) + "\n";
+        if(fps > 0 && fps < 1000) fpsStream << "\n" + std::to_string(fps);
 
         //Output frame 
         try{
@@ -302,7 +301,7 @@ void Scene::cameraSwitch(){
     std::cout << "Threads joined" << std::endl;
 }
 
-void Scene::outputFrame(cv::Mat* frame, double fps){
+void Scene::outputFrame(cv::Mat* frame, int fps){
     //Resize
     cv::resize(*frame, *frame, cv::Size((frame->cols/(double)(frame->rows))*outHeight, outHeight), 0.0, 0.0, cv::INTER_AREA);
     //Crop to out dimensions

@@ -20,13 +20,15 @@ private:
     double getArea(const std::vector<std::vector<cv::Point>>& contours)const;
     double getAvgVelocity(const cv::Mat& currFrameGray, const cv::Mat& prevFrameGray, const std::vector<std::vector<cv::Point>>& contours);
     void displayAnalysis(const cv::Mat& diffFrame, const cv::Mat& croppedFrame, const std::vector<std::vector<cv::Point>>& contours, const double area, const double avgVel);
-
+    //DA RIMUOVERE
+    cv::VideoWriter analysisOut;
 public:
     static bool stopSignalReceived;
+    static double alpha;
     std::string capName;
     std::string source;
     cv::Mat frame;
-    double momentum;
+    double score;
     bool active;
     bool readyToRetrieve;
     std::mutex mx;
