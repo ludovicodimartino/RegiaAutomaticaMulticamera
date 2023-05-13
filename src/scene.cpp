@@ -171,8 +171,12 @@ void Scene::readConfigFile(const std::string& configFilePath){
             //Setting general parameters
             if(currentParsing == "[GENERAL]"){
                 if(key == "displayOutput" && value == "true") displayOutput = true;
-                if(key == "smoothing") smoothing = std::stoi(value);
-                if(key == "fpsToFile") fpsToFile = true;
+                if(key == "smooth"){
+                    int tmp = std::stoi(value);
+                    if(tmp <= 0)throw std::invalid_argument("The smooth value '" + value + "' in '" + line + "' must be greater than 0");
+                    smoothing = tmp;
+                } 
+                if(key == "fpsToFile" && value == "true") fpsToFile = true;
                 if(key == "fpsFilePath") fpsFilePath = value;
                 if(key == "alpha"){
                     double a = std::stod(value);
