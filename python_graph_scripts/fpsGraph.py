@@ -11,8 +11,8 @@ def histAndPDF(fileName, outFileName):
     # Read CSV
     df = pd.read_csv(fileName)
 
-    plt.xlabel('FPS')
-    plt.ylabel('Frequenza di occorrenza')
+    plt.xlabel('Frame rate [fps]')
+    plt.ylabel('Densità')
 
     # plot the histogram 
     plt.hist(x = df["fps"], 
@@ -27,16 +27,17 @@ def histAndPDF(fileName, outFileName):
     p = norm.pdf(x, mu, std)
 
     lbl = "μ = {:.2f}\nσ = {:.2f}".format(mu, std)
-    plt.plot(x, p, 'k', linewidth=2, label=lbl)
+    plt.plot(x, p, 'k', label=lbl)
     plt.legend(loc="upper right")
     plt.savefig(outFileName, dpi=100)
     plt.show()
 
 def FPSAndTime(fileName, outFileName):
     df = pd.read_csv(fileName)
-    plt.xlabel('Numero Frame')
-    plt.ylabel('FPS')
-    plt.plot(df['fps'])
+    plt.xlabel('Tempo [s]')
+    plt.ylabel('Frame rate [fps]')
+    print([i/25 for i in range(0, len(df['fps']))])
+    plt.plot([i/25 for i in range(0, len(df['fps']))], df['fps'], linewidth=0, marker='o', markersize=1)
     plt.savefig(outFileName, dpi=100)
     plt.show()
 

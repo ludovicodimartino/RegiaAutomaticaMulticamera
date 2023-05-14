@@ -18,7 +18,10 @@ Capture::Capture(std::string _capName, std::string _source) : VideoCapture(_sour
     weight = 1;
     paramToDisplay = {{"FINAL_SCORE", "0"}, {"AREAS_NUM", "0"}, {"WEIGHT", std::to_string(weight)},
                       {"AVG_VELOCITY", "0"}, {"AREA", "0"}};
-    int cropCoords[4] = {0, (int)get(cv::CAP_PROP_FRAME_WIDTH), 0, (int)get(cv::CAP_PROP_FRAME_HEIGHT)};
+    cropCoords[0] = 0;
+    cropCoords[1] = get(cv::CAP_PROP_FRAME_HEIGHT);
+    cropCoords[2] = 0;
+    cropCoords[3] = get(cv::CAP_PROP_FRAME_WIDTH);
     ratio = get(cv::CAP_PROP_FRAME_WIDTH)/get(cv::CAP_PROP_FRAME_HEIGHT);
 
 }
@@ -77,7 +80,7 @@ void Capture::motionDetection(){
         croppedFrame = croppedFrame(cv::Range(cropCoords[0], cropCoords[1]), cv::Range(cropCoords[2], cropCoords[3]));
 
         //Resize the frame for faster analysis
-        //cv::resize(croppedFrame, croppedFrame, cv::Size(100, (croppedFrame.rows/(double)croppedFrame.cols)*100));
+        cv::resize(croppedFrame, croppedFrame, cv::Size(150, (croppedFrame.rows/(double)croppedFrame.cols)*150), cv::INTER_AREA);
         
         // Check if a stop signal has arrived
         if(stopSignalReceived){
@@ -87,7 +90,7 @@ void Capture::motionDetection(){
 
         // Preprocessing
         cvtColor(croppedFrame, croppedFrame, cv::COLOR_BGR2GRAY); //gray scale
-        GaussianBlur(croppedFrame, croppedFrame, cv::Size(5,5), 0.5); //gussian blur
+        GaussianBlur(croppedFrame, croppedFrame, cv::Size(5,5), 0.3); //gussian blur
         
         if(processedFrameNum + 1) {
             absdiff(previousFrame, croppedFrame, currDiffFrame);
@@ -140,7 +143,7 @@ double Capture::getArea(const std::vector<std::vector<cv::Point>>& contours)cons
     double totalArea = 0;
     for(int i = 0; i < contours.size(); i++){
         double area = contourArea(contours[i]);
-        if (area < 50){ // Do not include obj with a small area
+        if (area < 10){ // Do not include obj with a small area
             continue;
         }
         totalArea += area;
@@ -205,6 +208,7 @@ void Capture::displayAnalysis(const cv::Mat& diffFrame, const cv::Mat& croppedFr
             paramToDisplay["AREAS_NUM"] = std::to_string((int)contours.size());
             paramToDisplay["AVG_VELOCITY"] = std::to_string((int)avgVel);
             paramToDisplay["AREA"] = std::to_string((int)area);
+            paramToDisplay["WEIGHTS"] = std::to_string(weight);
         }
         // Insert some labels
         int i = 0;

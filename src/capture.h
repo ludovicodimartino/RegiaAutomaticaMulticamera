@@ -7,7 +7,7 @@
 #include <mutex>
 #include <condition_variable>
 
-#define DILATE_SIZE 3
+#define DILATE_SIZE 2
 
 class Capture : public cv::VideoCapture{
 private:

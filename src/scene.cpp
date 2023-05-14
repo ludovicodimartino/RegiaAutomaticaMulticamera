@@ -282,7 +282,7 @@ void Scene::cameraSwitch(){
         last_frame = cv::getTickCount();
         //Update fpsToDisplay every 15 frames
         if(!(frameNum % 15)) fpsToDisplay = fps;
-        if(fps > 0 && fps < 1000) fpsStream << "\n" + std::to_string(fps);
+        if(fps > 0 && fps < 3000) fpsStream << "\n" + std::to_string(fps);
 
         //Output frame 
         try{
