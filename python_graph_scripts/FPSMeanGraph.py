@@ -5,8 +5,8 @@ import numpy as np
 import sys
 import os.path
 
-def objective(x, a, b, c):
-    return (a/(x**2)) +b/x+c
+def objective(x, a, b):
+    return (a/(x**2)) +b/x
 
 def meanGraph(fileName, outFileName):
     # Read CSVs
@@ -26,12 +26,12 @@ def meanGraph(fileName, outFileName):
         # curve fit
     popt, _ = curve_fit(objective, np.asarray(range(1,14)).ravel(), np.asarray(means).ravel())
     # summarize the parameter values
-    a, b, c = popt
-    print('y = %.5f/x^2 + %.5f/x + %.5f' % (a, b,c))
+    a, b = popt
+    print('y = %.5f/x^2 + %.5f/x' % (a, b))
 
 
     x_line = np.asarray(range(1,14)).ravel()
-    y_line = objective(x_line, a, b, c)
+    y_line = objective(x_line, a, b)
     plt.plot(x_line, y_line, '--', color='red', label="Curve fitting")
     plt.plot(range(1,14), means, linewidth=0, marker='o', markersize=8, markerfacecolor='cyan', mew=0, label="Dati reali")
     plt.legend(loc="upper right")
