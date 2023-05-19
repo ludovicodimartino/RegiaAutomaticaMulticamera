@@ -5,6 +5,7 @@
 #include <fstream>
 #include <thread>
 #include <chrono>
+#include <ctime>
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui.hpp>
 
@@ -16,6 +17,7 @@ Scene::Scene(const std::string configFilePath){
     displayOutput = false;
     smoothing = 20;
     fpsToFile = false;
+    displayAllCaptures=false;
     fpsFilePath = "../out/FPS.csv";
 
     // Reading config File
@@ -38,6 +40,14 @@ Scene::Scene(const std::string configFilePath){
         }
         fpsStream << "fps"; // Insert top label in the file
     }
+
+    //Init the zero mat with the right dimensions
+    if(displayAllCaptures){
+        int n = topCaps.size() + lateralCaps.size();
+        int height = 224 + 112*((n-1)/4);
+        generalMonitor = cv::Mat::zeros(cv::Size(1270, height),CV_8UC3);
+    }
+
     // outVideo init
     outVideo = cv::VideoWriter(outPath, cv::VideoWriter::fourcc('m','p','4','v'),25, cv::Size(outWidth,outHeight));
 }
@@ -177,6 +187,7 @@ void Scene::readConfigFile(const std::string& configFilePath){
                     smoothing = tmp;
                 } 
                 if(key == "fpsToFile" && value == "true") fpsToFile = true;
+                if(key == "displayAllCaptures" && value == "true") displayAllCaptures=true;
                 if(key == "fpsFilePath") fpsFilePath = value;
                 if(key == "alpha"){
                     double a = std::stod(value);
@@ -200,7 +211,8 @@ void Scene::cameraSwitch(){
     std::cout << "Threads started\nPress Ctrl+C to stop" << std::endl;
     
     uint frameNum = 0;
-    int64 last_frame;
+    //int64 last_frame = 0;
+    std::chrono::time_point<std::chrono::system_clock> last_frame = std::chrono::system_clock::now();
     int selectedFrames[topCaps.size()] = { 0 }; // Save the selected frame index as if the swithing were happening every frame
     int shownCaptureIndex = 0;
     int fpsToDisplay = 0, fps = 0;
@@ -221,7 +233,12 @@ void Scene::cameraSwitch(){
         int slectedCapture = -1;
         cv::Mat frameToshow;
         
-        
+        // clean the generalMonitor Mat
+        if(displayAllCaptures && !(frameNum%15)){
+            generalMonitor = cv::Scalar(33,33,33);
+            cv::putText(generalMonitor, "CAM     A       V       W       S", cv::Point(810, 30), cv::FONT_HERSHEY_PLAIN, 1.3, CV_RGB(230, 230, 230), 1);
+            cv::putText(generalMonitor, "A = area, V = avg velocity, W = frame weight, S = final score", cv::Point(810, generalMonitor.rows - 10), cv::FONT_HERSHEY_PLAIN, 0.8, CV_RGB(230, 230, 230), 1);
+        } 
         for(int i = 0; i < topCaps.size(); i++){
             if(topCaps[i]->active){
                 // Wait for the processed frame to be ready for this thread
@@ -251,6 +268,29 @@ void Scene::cameraSwitch(){
                 // Copy the frame to show
                 if(i == shownCaptureIndex) frameToshow = topCaps[i]->frame.clone();
 
+                if(displayAllCaptures){
+                    topCaps[i]->frame = topCaps[i]->frame(cv::Range(0, topCaps[i]->frame.rows), cv::Range(topCaps[i]->frame.cols/2 - 199, topCaps[i]->frame.cols/2 + 199));
+                    cv::resize(topCaps[i]->frame, topCaps[i]->frame, cv::Size(0.0,0.0), 0.5,0.5);
+                    if(i == shownCaptureIndex) cv::rectangle(topCaps[i]->frame, cv::Rect(0,0, topCaps[i]->frame.cols, topCaps[i]->frame.rows), cv::Scalar(0,255,0), 4,8);
+                    if(!(frameNum%15)){
+                        std::vector<std::string> stats = {std::to_string(i+1), 
+                                                        std::to_string((int)topCaps[i]->area), 
+                                                        std::to_string((int)topCaps[i]->vel),
+                                                        std::to_string(topCaps[i]->weight),
+                                                        std::to_string((int)topCaps[i]->score)};
+                        for(int j = 0; j < stats.size(); j++){
+                            cv::putText(generalMonitor, stats[j], cv::Point(810 + 90*j, 60 + i*30), cv::FONT_HERSHEY_PLAIN, 1.3, CV_RGB(230, 230, 230), 1);
+                        }
+                    }
+                    cv::putText(topCaps[i]->frame, std::to_string(i+1), cv::Point(6,20), cv::FONT_HERSHEY_PLAIN, 1.3, CV_RGB(230, 230, 230), 1);
+                    int xOffset = i < 4 ? 398 + 199*(i%2) : 199*(i%4);
+                    int yOffset = i < 4 ? 112*(i/2) : 224 + 112*((i-4)/4);
+                    topCaps[i]->frame.copyTo(generalMonitor.rowRange(yOffset, yOffset + 112).colRange(xOffset, xOffset + topCaps[i]->frame.cols));
+                    if(!frameToshow.empty()){
+                        frameToshow = frameToshow(cv::Range(0, frameToshow.rows), cv::Range(frameToshow.cols/2 - 199, frameToshow.cols/2 + 199));
+                        frameToshow.copyTo(generalMonitor.rowRange(0, frameToshow.rows).colRange(0, frameToshow.cols));
+                    } 
+                }
                 topCaps[i]->readyToRetrieve = false;
                 lk.unlock();
                 topCaps[i]->condVar.notify_one();
@@ -278,15 +318,20 @@ void Scene::cameraSwitch(){
         }
 
         //Calculate the fps
-        fps = (int)std::floor(cv::getTickFrequency()/(cv::getTickCount() - last_frame));
-        last_frame = cv::getTickCount();
+        // fps = (int)std::floor(cv::getTickFrequency()/(cv::getTickCount() - last_frame));
+        // last_frame = cv::getTickCount();
+        std::chrono::duration<double> elapsed_seconds = std::chrono::system_clock::now()-last_frame;
+        fps = (int)(1/(elapsed_seconds.count()));
+        last_frame = std::chrono::system_clock::now();
+
         //Update fpsToDisplay every 15 frames
         if(!(frameNum % 15)) fpsToDisplay = fps;
         if(fps > 0 && fps < 3000) fpsStream << "\n" + std::to_string(fps);
 
         //Output frame 
         try{
-            if(!frameToshow.empty())outputFrame(&frameToshow, fpsToDisplay);
+            //if(!frameToshow.empty())outputFrame(&frameToshow, fpsToDisplay);
+            outMultiCamMonitor(&generalMonitor);
         } catch(const cv::Exception& e){
             std::cerr << "[OUTPUT FRAME EXCEPTION]: " << e.what() << std::endl;
             Capture::stopSignalReceived = true;
@@ -330,5 +375,15 @@ void Scene::outputFrame(cv::Mat* frame, int fps){
             2);
             cv::imshow("OUT", *frame);
         } 
+    }
+}
+
+void Scene::outMultiCamMonitor(cv::Mat* frame){
+    if(displayAllCaptures){
+        cv::namedWindow("Monitor", cv::WND_PROP_OPENGL);
+        cv::setWindowProperty("Monitor", cv::WND_PROP_OPENGL, cv::WINDOW_OPENGL);
+        cv::waitKey(1);
+        if(!getWindowProperty("Monitor", cv::WND_PROP_VISIBLE)) displayAllCaptures = false;
+        else cv::imshow("Monitor", *frame);
     }
 }

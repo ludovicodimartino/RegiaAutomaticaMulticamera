@@ -138,16 +138,17 @@ void Capture::motionDetection(){
     condVar.notify_one(); // To unlock the scene while loop
 }
 
-double Capture::getArea(const std::vector<std::vector<cv::Point>>& contours)const{
+double Capture::getArea(const std::vector<std::vector<cv::Point>>& contours){
     // Calculate the area
     double totalArea = 0;
     for(int i = 0; i < contours.size(); i++){
-        double area = contourArea(contours[i]);
-        if (area < 10){ // Do not include obj with a small area
+        double a = contourArea(contours[i]);
+        if (a < 10){ // Do not include obj with a small area
             continue;
         }
-        totalArea += area;
+        totalArea += a;
     }
+    area = totalArea;
     return totalArea;
 }
 
@@ -184,7 +185,8 @@ double Capture::getAvgVelocity(const cv::Mat& currFrameGray, const cv::Mat& prev
             good_new.push_back(calcPoints[i]);
         }
     }
-    return (velocitySum/good)*100; // *100 to avoid sub 1 values
+    vel = (velocitySum/good)*100;
+    return vel; // *100 to avoid sub 1 values
 }
 
 void Capture::displayAnalysis(const cv::Mat& diffFrame, const cv::Mat& croppedFrame, const std::vector<std::vector<cv::Point>>& contours, const double area, const double avgVel){

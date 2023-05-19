@@ -10,6 +10,8 @@
 #include <mutex>
 #include <thread>
 
+#define MONITOR_BORDER 5
+
 typedef enum CameraType{
     TOP = 1,
     LATERAL = 2
@@ -33,10 +35,13 @@ private:
     cv::VideoWriter outVideo;
     int smoothing;
     bool fpsToFile;
+    bool displayAllCaptures;
+    cv::Mat generalMonitor;
     std::string fpsFilePath;
     std::ofstream fpsStream;
     void readConfigFile(const std::string& configFilePath);
     void releaseCaps()const;
+    void outMultiCamMonitor(cv::Mat* frame);
     void outputFrame(cv::Mat* frame, int fps);
 };
 

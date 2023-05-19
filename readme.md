@@ -11,9 +11,11 @@
 - [x] Migliore gestione del resizing nel displaying.
 - [x] Migliora parsing file di configurazione.
 - [ ] Aggiorna UML.
-- [ ] Analisi prestazioni: come variano gli fps man mano che si aggiungono sources? Grafici...
+- [ ] Analisi prestazioni: come variano gli fps man mano che si aggiungono sources? Grafici... (curva su graph 1)
+- [ ] Camere laterali: 640x360
     - [x] Aggiugi funzione *fpsToFile* che è possibile attivare e disattivare dal file di configurazione
     - [x] Creazione di grafici.
+- [x] Visone interfaccia multicamera
 
  ## Output
 
