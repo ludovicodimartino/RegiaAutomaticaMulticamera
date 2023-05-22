@@ -36,8 +36,7 @@ def FPSAndTime(fileName, outFileName):
     df = pd.read_csv(fileName)
     plt.xlabel('Tempo [s]')
     plt.ylabel('Frame rate [fps]')
-    print([i/25 for i in range(0, len(df['fps']))])
-    plt.plot([i/25 for i in range(0, len(df['fps']))], df['fps'], linewidth=0, marker='o', markersize=1)
+    plt.plot([i/25 for i in range(0, len(df['fps']))], df['fps'], linewidth=0.5)
     plt.savefig(outFileName, dpi=100)
     plt.show()
 
