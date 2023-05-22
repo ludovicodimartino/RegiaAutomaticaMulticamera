@@ -17,7 +17,7 @@ private:
     std::map<std::string, std::string> paramToDisplay;
     bool isdisplayAnalysis;
     double getArea(const std::vector<std::vector<cv::Point>>& contours);
-    double getAvgVelocity(const cv::Mat& currFrameGray, const cv::Mat& prevFrameGray, const std::vector<std::vector<cv::Point>>& contours);
+    double getAvgSpeed(const cv::Mat& currFrameGray, const cv::Mat& prevFrameGray, const std::vector<std::vector<cv::Point>>& contours);
     void displayAnalysis(const cv::Mat& diffFrame, const cv::Mat& croppedFrame, const std::vector<std::vector<cv::Point>>& contours, const double area, const double avgVel);
     //DA RIMUOVERE
     cv::VideoWriter analysisOut;
@@ -28,6 +28,7 @@ public:
     std::string source;
     cv::Mat frame;
     int weight;
+    int area_n;
     double score;
     double area;
     double vel;

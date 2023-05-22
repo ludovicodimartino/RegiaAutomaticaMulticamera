@@ -41,7 +41,7 @@ private:
     std::ofstream fpsStream;
     void readConfigFile(const std::string& configFilePath);
     void releaseCaps()const;
-    void outMultiCamMonitor(cv::Mat* frame);
+    void outMultiCamMonitor(cv::Mat* frame, int fps);
     void outputFrame(cv::Mat* frame, int fps);
 };
 

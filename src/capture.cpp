@@ -16,8 +16,11 @@ Capture::Capture(std::string _capName, std::string _source) : VideoCapture(_sour
     score = 0;
     active = false;
     weight = 1;
+    area = 0;
+    area_n = 0;
+    vel = 0;
     paramToDisplay = {{"FINAL_SCORE", "0"}, {"AREAS_NUM", "0"}, {"WEIGHT", std::to_string(weight)},
-                      {"AVG_VELOCITY", "0"}, {"AREA", "0"}};
+                      {"AVG_SPEED", "0"}, {"AREA", "0"}};
     cropCoords[0] = 0;
     cropCoords[1] = get(cv::CAP_PROP_FRAME_HEIGHT);
     cropCoords[2] = 0;
@@ -106,11 +109,15 @@ void Capture::motionDetection(){
             findContours(currDiffFrame, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
             double area = 0, avgVel = 0, s = 0;
             //Check whether contours.size is greater than 0 before performing the calculation
-            if(contours.size() > 0){
+            area_n = contours.size();
+            if(area_n > 0){
                 area = getArea(contours);
-                avgVel = getAvgVelocity(croppedFrame, previousFrame, contours);
+                avgVel = getAvgSpeed(croppedFrame, previousFrame, contours);
                 double nalpha = std::pow(contours.size(), alpha); // n to the power of alpha
                 s = area*avgVel*weight*nalpha; // calculate the weighted score
+            } else{
+                area = 0;
+                vel = 0;
             }
 
             //acquire lock
@@ -152,7 +159,7 @@ double Capture::getArea(const std::vector<std::vector<cv::Point>>& contours){
     return totalArea;
 }
 
-double Capture::getAvgVelocity(const cv::Mat& currFrameGray, const cv::Mat& prevFrameGray, const std::vector<std::vector<cv::Point>>& contours){
+double Capture::getAvgSpeed(const cv::Mat& currFrameGray, const cv::Mat& prevFrameGray, const std::vector<std::vector<cv::Point>>& contours){
 
     if(contours.size() == 0) return 0;
 
@@ -175,24 +182,23 @@ double Capture::getAvgVelocity(const cv::Mat& currFrameGray, const cv::Mat& prev
 
     std::vector<cv::Point2f> good_new;
     int good = 0;
-    double velocitySum = 0;
+    double speedSum = 0;
     for(int i = 0; i < mc.size(); i++){
         // Select good points
         if(status[i] == 1) {
             good++;
             cv::Point2f diff = mc[i] - calcPoints[i];    
-            velocitySum += cv::sqrt((diff.x*diff.x) + (diff.y*diff.y));
+            speedSum += cv::sqrt((diff.x*diff.x) + (diff.y*diff.y));
             good_new.push_back(calcPoints[i]);
         }
     }
-    vel = (velocitySum/good)*100;
+    vel = (speedSum/good)*100;
     return vel; // *100 to avoid sub 1 values
 }
 
 void Capture::displayAnalysis(const cv::Mat& diffFrame, const cv::Mat& croppedFrame, const std::vector<std::vector<cv::Point>>& contours, const double area, const double avgVel){
     std::string winName = capName + " ANALYSIS - for DEBUGGING purposes ONLY";
-    cv::namedWindow(winName, cv::WND_PROP_OPENGL);
-    cv::setWindowProperty(winName, cv::WND_PROP_OPENGL, cv::WINDOW_OPENGL);
+    cv::namedWindow(winName, cv::WINDOW_NORMAL);
     cv::waitKey(1);
     if(!getWindowProperty(winName, cv::WND_PROP_VISIBLE)) isdisplayAnalysis = false;
     else{
@@ -208,7 +214,7 @@ void Capture::displayAnalysis(const cv::Mat& diffFrame, const cv::Mat& croppedFr
         if(!(processedFrameNum%15)){
             paramToDisplay["FINAL_SCORE"] = std::to_string((int)std::floor(score));
             paramToDisplay["AREAS_NUM"] = std::to_string((int)contours.size());
-            paramToDisplay["AVG_VELOCITY"] = std::to_string((int)avgVel);
+            paramToDisplay["AVG_SPEED"] = std::to_string((int)avgVel);
             paramToDisplay["AREA"] = std::to_string((int)area);
             paramToDisplay["WEIGHTS"] = std::to_string(weight);
         }
