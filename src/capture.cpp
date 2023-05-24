@@ -107,17 +107,15 @@ void Capture::motionDetection(){
             //Calculate the score of the frame
             std::vector<std::vector<cv::Point>> contours;
             findContours(currDiffFrame, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-            double area = 0, avgVel = 0, s = 0;
+            double tmpArea = 0, avgVel = 0, s = 0;
             //Check whether contours.size is greater than 0 before performing the calculation
             area_n = contours.size();
             if(area_n > 0){
-                area = getArea(contours);
+                tmpArea = getArea(contours);
                 avgVel = getAvgSpeed(croppedFrame, previousFrame, contours);
                 double nalpha = std::pow(contours.size(), alpha); // n to the power of alpha
-                s = area*avgVel*weight*nalpha; // calculate the weighted score
-            } else{
-                area = 0;
-                vel = 0;
+                s = tmpArea*avgVel*weight*nalpha; // calculate the weighted score
+                //std::cout << std::to_string(tmpArea) + " " + std::to_string(avgVel)  + " " + std::to_string(weight) + " " + std::to_string(area_n) + " " + std::to_string(s) + "\n";
             }
 
             //acquire lock
@@ -125,7 +123,10 @@ void Capture::motionDetection(){
             condVar.wait(lk, [this] {return !readyToRetrieve;});
             
             score = s; // update the score
-            if(isdisplayAnalysis) displayAnalysis(currDiffFrame, croppedFrame, contours, area, avgVel); 
+            area = tmpArea; // update the area
+            vel = avgVel; // update the speed
+
+            if(isdisplayAnalysis) displayAnalysis(currDiffFrame, croppedFrame, contours, tmpArea, avgVel); 
             frame.release();
             frame = originalFrame.clone(); // update the frame
             readyToRetrieve = true;

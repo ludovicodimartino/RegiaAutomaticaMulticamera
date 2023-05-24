@@ -6,15 +6,15 @@
 - [x] Resizing prima dell'input a 522x224 per la camera centrale e 576x224 per le camere laterali
 - [x] Dare un peso ad ogni camera
 - [x] Il numero di aree in ogni frame può influenzare la scelta della camera da mostrare con parametro nel file di configurazione.
-- [ ] Salvare video tresholdato. 
+- [x] Salvare video tresholdato. 
     - [x] Aggiungere la possibilità di visionare l'analisi.
 - [x] Migliore gestione del resizing nel displaying.
 - [x] Migliora parsing file di configurazione.
 - [ ] Aggiorna UML.
 - [ ] Analisi prestazioni: come variano gli fps man mano che si aggiungono sources? Grafici... (curva su graph 1)
-- [ ] Camere laterali: 640x360
     - [x] Aggiugi funzione *fpsToFile* che è possibile attivare e disattivare dal file di configurazione
     - [x] Creazione di grafici.
+- [x] Camere laterali: 640x360
 - [x] Visone interfaccia multicamera
 
  ## Output

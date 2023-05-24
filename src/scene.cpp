@@ -46,6 +46,8 @@ Scene::Scene(const std::string configFilePath){
         int n = topCaps.size() + lateralCaps.size();
         int height = 224 + 112*((n-1)/4);
         generalMonitor = cv::Mat::zeros(cv::Size(1350, height),CV_8UC3);
+        cv::namedWindow("General Monitor", cv::WINDOW_NORMAL);
+        cv::resizeWindow("General Monitor", 1350, height);
     }
 
     // outVideo init
@@ -203,6 +205,7 @@ void Scene::readConfigFile(const std::string& configFilePath){
 }
 
 void Scene::cameraSwitch(){
+    // merge lateral caps and top cap
     std::vector<std::shared_ptr<Capture>> capsToAnalyze(topCaps.size() + lateralCaps.size());
     std::merge(topCaps.begin(), topCaps.end(), lateralCaps.begin(), lateralCaps.end(), capsToAnalyze.begin());
 
@@ -213,41 +216,27 @@ void Scene::cameraSwitch(){
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     std::cout << "Threads started\nPress Ctrl+C to stop" << std::endl;
     
-    uint frameNum = 0;
+    uint frameNum = 0; // keep record of the processed frame number
     std::chrono::time_point<std::chrono::system_clock> last_frame = std::chrono::system_clock::now();
-    int selectedFrames[capsToAnalyze.size()] = { 0 }; // Save the selected frame index as if the swithing were happening every frame
+    int selectedFrames[capsToAnalyze.size()] = { 0 }; // Save the selected frame index as if the switching were happening every frame
     int shownCaptureIndex = 0;
     int fpsToDisplay = 0, fps = 0;
     
     while(1){
-        // Check if at least one camera is active
-        bool atLeastOneActive = false;
-        for(auto& cap : capsToAnalyze){ 
-            if(cap->active){
-                atLeastOneActive = true;
-                break;
-            } 
-        }
-        if(!atLeastOneActive) break;
-
+        if(!isAtLeastOneActive(capsToAnalyze)) break;
+        if(displayAllCaptures && !(frameNum%15))clearGeneralMonitor();
 
         // Select the frame to show based on the frame that has the max score.
-        double maxMomentum = 0;
+        double maxScore = 0;
         int slectedCapture = -1;
         cv::Mat frameToshow;
-        
-        // clean the generalMonitor Mat
-        if(displayAllCaptures && !(frameNum%15)){
-            generalMonitor = cv::Scalar(33,33,33);
-            cv::putText(generalMonitor, "CAM     N       A       V       W       S", cv::Point(810, 30), cv::FONT_HERSHEY_PLAIN, 1.3, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
-            cv::putText(generalMonitor, "N = number of areas, A = area, V = avg speed", cv::Point(810, generalMonitor.rows - 24), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
-            cv::putText(generalMonitor, "W = frame weight, S = final score", cv::Point(810, generalMonitor.rows - 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
-        } 
+
         for(int i = 0; i < capsToAnalyze.size(); i++){
             if(capsToAnalyze[i]->active){
                 // Wait for the processed frame to be ready for this thread
                 std::unique_lock lk(capsToAnalyze[i]->mx);
                 capsToAnalyze[i]->condVar.wait(lk, [&] {return (capsToAnalyze[i]->readyToRetrieve || !capsToAnalyze[i]->active);});
+                
                 // Stop signal received
                 if(Capture::stopSignalReceived){
                     capsToAnalyze[i]->readyToRetrieve = false;
@@ -256,49 +245,23 @@ void Scene::cameraSwitch(){
                     break;
                 } 
 
-
                 if(capsToAnalyze[i]->active){
-                    if(capsToAnalyze[i]->score > maxMomentum){
-                        maxMomentum = capsToAnalyze[i]->score;
+                    if(capsToAnalyze[i]->score > maxScore){
+                        maxScore = capsToAnalyze[i]->score;
                         slectedCapture = i;
                     }
                     if(slectedCapture == -1 && i == capsToAnalyze.size()-1){ // Last reached without a max score: force a frame
                         slectedCapture = i;
-                        //std::cout << "Forced camera" << std::endl;
                     } 
                     
                 } 
 
                 // Copy the frame to show
                 if(i == shownCaptureIndex) frameToshow = capsToAnalyze[i]->frame.clone();
-
-                if(displayAllCaptures){
-                    cv::resize(capsToAnalyze[i]->frame, capsToAnalyze[i]->frame, cv::Size((capsToAnalyze[i]->frame.cols/(double)(capsToAnalyze[i]->frame.rows))*112, 112), 0.0,0.0, cv::INTER_AREA);
-                    capsToAnalyze[i]->frame = capsToAnalyze[i]->frame(cv::Range(0, 112), cv::Range(capsToAnalyze[i]->frame.cols/(double)2 - 99.5, capsToAnalyze[i]->frame.cols/(double)2 + 99.5));
-                    
-                    if(i == shownCaptureIndex) cv::rectangle(capsToAnalyze[i]->frame, cv::Rect(0,0, capsToAnalyze[i]->frame.cols, capsToAnalyze[i]->frame.rows), cv::Scalar(0,255,0), 4,8);
-                    if(!(frameNum%15)){
-                        std::vector<std::string> stats = {std::to_string(i+1), 
-                                                        std::to_string(capsToAnalyze[i]->area_n),
-                                                        std::to_string((int)capsToAnalyze[i]->area), 
-                                                        std::to_string((int)capsToAnalyze[i]->vel),
-                                                        std::to_string(capsToAnalyze[i]->weight),
-                                                        std::to_string((int)capsToAnalyze[i]->score)};
-                        for(int j = 0; j < stats.size(); j++){
-                            cv::putText(generalMonitor, stats[j], cv::Point(810 + 90*j, 60 + i*30), cv::FONT_HERSHEY_PLAIN, 1.3, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
-                        }
-                    }
-                    cv::putText(capsToAnalyze[i]->frame, std::to_string(i+1), cv::Point(6,20), cv::FONT_HERSHEY_PLAIN, 1.3, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
-                    int xOffset = i < 4 ? 398 + 199*(i%2) : 199*(i%4);
-                    int yOffset = i < 4 ? 112*(i/2) : 224 + 112*((i-4)/4);
-                    capsToAnalyze[i]->frame.copyTo(generalMonitor.rowRange(yOffset, yOffset + 112).colRange(xOffset, xOffset + capsToAnalyze[i]->frame.cols));
-                    if(i == shownCaptureIndex){
-                        cv::Mat tmp = frameToshow.clone();
-                        cv::resize(tmp, tmp, cv::Size((tmp.cols/(double)tmp.rows)*224, 224), 0.0,0.0, cv::INTER_AREA);
-                        tmp = tmp(cv::Range(0, tmp.rows), cv::Range(tmp.cols/(double)2 - 199, tmp.cols/(double)2 + 199));
-                        tmp.copyTo(generalMonitor.rowRange(0, tmp.rows).colRange(0, tmp.cols));
-                    } 
-                }
+                
+                //Set the general monitor
+                if(displayAllCaptures) assembleGeneralMonitor(capsToAnalyze[i], frameNum, i == shownCaptureIndex, i, frameToshow);
+                
                 capsToAnalyze[i]->readyToRetrieve = false;
                 lk.unlock();
                 capsToAnalyze[i]->condVar.notify_one();
@@ -332,12 +295,12 @@ void Scene::cameraSwitch(){
 
         //Update fpsToDisplay every 15 frames
         if(!(frameNum % 15)) fpsToDisplay = fps;
-        if(fps > 0 && fps < 3000) fpsStream << "\n" + std::to_string(fps);
+        if(fpsToFile && fps > 0 && fps < 3000) fpsStream << "\n" + std::to_string(fps);
 
         //Output frame 
         try{
             if(!frameToshow.empty())outputFrame(&frameToshow, fpsToDisplay);
-            outMultiCamMonitor(&generalMonitor, fpsToDisplay);
+            outputGeneralMonitor(&generalMonitor, fpsToDisplay);
         } catch(const cv::Exception& e){
             std::cerr << "[OUTPUT FRAME EXCEPTION]: " << e.what() << std::endl;
             Capture::stopSignalReceived = true;
@@ -354,6 +317,66 @@ void Scene::cameraSwitch(){
         th.join();
     }
     std::cout << "Threads joined" << std::endl;
+}
+
+bool Scene::isAtLeastOneActive(const std::vector<std::shared_ptr<Capture>>& caps)const{
+    // Check if at least one camera is active
+    bool atLeastOneActive = false;
+    for(const auto& cap : caps){ 
+        if(cap->active){
+            atLeastOneActive = true;
+            break;
+        } 
+    }
+    return atLeastOneActive;
+}
+
+void Scene::assembleGeneralMonitor(const std::shared_ptr<Capture>& cap, const int frameNum, const bool isLive, const int capNum, const cv::Mat& frameToShow){
+    cv::resize(cap->frame, cap->frame, cv::Size((cap->frame.cols/(double)(cap->frame.rows))*112, 112), 0.0,0.0, cv::INTER_AREA);
+    cap->frame = cap->frame(cv::Range(0, 112), cv::Range(cap->frame.cols/(double)2 - 99.5, cap->frame.cols/(double)2 + 99.5));
+    
+    if(isLive) cv::rectangle(cap->frame, cv::Rect(0,0, cap->frame.cols, cap->frame.rows), cv::Scalar(0,255,0), 4,8);
+    
+    // update text in the monitor
+    if(!(frameNum%15)){
+        std::vector<std::string> stats = {std::to_string(capNum + 1), 
+                                        std::to_string(cap->area_n),
+                                        std::to_string((int)cap->area), 
+                                        std::to_string((int)cap->vel),
+                                        std::to_string(cap->weight),
+                                        std::to_string((int)cap->score)};
+        for(int j = 0; j < stats.size(); j++){
+            cv::putText(generalMonitor, stats[j], cv::Point(810 + 90*j, 60 + capNum*30), cv::FONT_HERSHEY_PLAIN, 1.3, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
+        }
+    }
+    cv::putText(cap->frame, std::to_string(capNum+1), cv::Point(6,20), cv::FONT_HERSHEY_PLAIN, 1.3, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
+    int xOffset = capNum < 4 ? 398 + 199*(capNum%2) : 199*(capNum%4);
+    int yOffset = capNum < 4 ? 112*(capNum/2) : 224 + 112*((capNum-4)/4);
+    cap->frame.copyTo(generalMonitor.rowRange(yOffset, yOffset + 112).colRange(xOffset, xOffset + cap->frame.cols));
+    if(isLive){ // show the top left output
+        cv::Mat tmp = frameToShow.clone();
+        cv::resize(tmp, tmp, cv::Size((tmp.cols/(double)tmp.rows)*224, 224), 0.0,0.0, cv::INTER_AREA);
+        tmp = tmp(cv::Range(0, tmp.rows), cv::Range(tmp.cols/(double)2 - 199, tmp.cols/(double)2 + 199));
+        tmp.copyTo(generalMonitor.rowRange(0, tmp.rows).colRange(0, tmp.cols));
+    } 
+}
+
+void Scene::clearGeneralMonitor(){
+    generalMonitor = cv::Scalar(33,33,33);
+    cv::putText(generalMonitor, "CAM     N       A       V       W       S", cv::Point(810, 30), cv::FONT_HERSHEY_PLAIN, 1.3, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
+    cv::putText(generalMonitor, "N = number of areas, A = area, V = avg speed", cv::Point(810, generalMonitor.rows - 24), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
+    cv::putText(generalMonitor, "W = frame weight, S = final score", cv::Point(810, generalMonitor.rows - 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
+}
+
+void Scene::outputGeneralMonitor(cv::Mat* frame, int fps){
+    if(displayAllCaptures){
+        cv::waitKey(1);
+        if(!getWindowProperty("General Monitor", cv::WND_PROP_VISIBLE)) displayAllCaptures = false;
+        else{
+            cv::putText(generalMonitor, "FPS: " + std::to_string(fps), cv::Point(810, generalMonitor.rows - 60), cv::FONT_HERSHEY_PLAIN, 1.2, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
+            cv::imshow("General Monitor", *frame);
+        } 
+    }
 }
 
 void Scene::outputFrame(cv::Mat* frame, int fps){
@@ -387,18 +410,6 @@ void Scene::outputFrame(cv::Mat* frame, int fps){
             CV_RGB(0, 255, 0), //font color
             2);
             cv::imshow("OUT", *frame);
-        } 
-    }
-}
-
-void Scene::outMultiCamMonitor(cv::Mat* frame, int fps){
-    if(displayAllCaptures){
-        cv::namedWindow("Monitor", cv::WINDOW_NORMAL);
-        cv::waitKey(1);
-        if(!getWindowProperty("Monitor", cv::WND_PROP_VISIBLE)) displayAllCaptures = false;
-        else{
-            cv::putText(generalMonitor, "FPS: " + std::to_string(fps), cv::Point(810, generalMonitor.rows - 60), cv::FONT_HERSHEY_PLAIN, 1.2, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
-            cv::imshow("Monitor", *frame);
         } 
     }
 }

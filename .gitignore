@@ -4,6 +4,9 @@ out/*
 # Video folder
 video/*
 
+# Out graph files
+python_graph_scripts/*.png
+
 # VsCode settings
 .vscode/*
 

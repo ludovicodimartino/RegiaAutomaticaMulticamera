@@ -39,9 +39,12 @@ private:
     cv::Mat generalMonitor;
     std::string fpsFilePath;
     std::ofstream fpsStream;
+    bool isAtLeastOneActive(const std::vector<std::shared_ptr<Capture>>& caps)const;
     void readConfigFile(const std::string& configFilePath);
     void releaseCaps()const;
-    void outMultiCamMonitor(cv::Mat* frame, int fps);
+    void clearGeneralMonitor();
+    void assembleGeneralMonitor(const std::shared_ptr<Capture>& cap, const int frameNum, const bool isLive, const int capNum, const cv::Mat& frameToShow);
+    void outputGeneralMonitor(cv::Mat* frame, int fps);
     void outputFrame(cv::Mat* frame, int fps);
 };
 
