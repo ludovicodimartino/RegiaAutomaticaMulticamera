@@ -14,7 +14,7 @@ Capture::Capture(std::string _capName, std::string _source) : VideoCapture(_sour
     readyToRetrieve = false;
     isdisplayAnalysis = false;
     score = 0;
-    active = false;
+    active = true;
     weight = 1;
     area = 0;
     area_n = 0;
@@ -108,12 +108,12 @@ void Capture::motionDetection(){
             std::vector<std::vector<cv::Point>> contours;
             findContours(currDiffFrame, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
             double tmpArea = 0, avgVel = 0, s = 0;
+            int n = contours.size();
             //Check whether contours.size is greater than 0 before performing the calculation
-            area_n = contours.size();
-            if(area_n > 0){
+            if(n > 0){
                 tmpArea = getArea(contours);
                 avgVel = getAvgSpeed(croppedFrame, previousFrame, contours);
-                double nalpha = std::pow(contours.size(), alpha); // n to the power of alpha
+                double nalpha = std::pow(n, alpha); // n to the power of alpha
                 s = tmpArea*avgVel*weight*nalpha; // calculate the weighted score
                 //std::cout << std::to_string(tmpArea) + " " + std::to_string(avgVel)  + " " + std::to_string(weight) + " " + std::to_string(area_n) + " " + std::to_string(s) + "\n";
             }
@@ -125,7 +125,8 @@ void Capture::motionDetection(){
             score = s; // update the score
             area = tmpArea; // update the area
             vel = avgVel; // update the speed
-
+            area_n = n; // update areas number
+            // std::cout << "CAPTURE: " + std::to_string(area) + " " + std::to_string(vel)  + " " + std::to_string(weight) + " " + std::to_string(area_n) + " " + std::to_string(score) + "\n";
             if(isdisplayAnalysis) displayAnalysis(currDiffFrame, croppedFrame, contours, tmpArea, avgVel); 
             frame.release();
             frame = originalFrame.clone(); // update the frame
@@ -146,6 +147,36 @@ void Capture::motionDetection(){
     condVar.notify_one(); // To unlock the scene while loop
 }
 
+void Capture::grabFrame(){
+    printf("thread ID: %d Name: %s\n",std::this_thread::get_id(), capName.c_str());
+    cv::Mat grabbedFrame;
+    while(isOpened()){
+        active = true;
+        if(!read(grabbedFrame))break;
+        
+        // Check if a stop signal has arrived
+        if(stopSignalReceived){
+            readyToRetrieve = true;
+            break;
+        }
+
+        //acquire lock
+        std::unique_lock lk(mx);
+        condVar.wait(lk, [this] {return !readyToRetrieve;});
+        
+        frame.release();
+        frame = grabbedFrame.clone(); // update the frame
+        readyToRetrieve = true;
+        // Unlock and notify
+        lk.unlock();
+        condVar.notify_one();
+        grabbedFrame.release();
+        ++processedFrameNum;
+    }
+    active = false;
+    condVar.notify_one(); // To unlock the scene while loop
+}
+
 double Capture::getArea(const std::vector<std::vector<cv::Point>>& contours){
     // Calculate the area
     double totalArea = 0;
@@ -156,7 +187,6 @@ double Capture::getArea(const std::vector<std::vector<cv::Point>>& contours){
         }
         totalArea += a;
     }
-    area = totalArea;
     return totalArea;
 }
 
@@ -193,13 +223,12 @@ double Capture::getAvgSpeed(const cv::Mat& currFrameGray, const cv::Mat& prevFra
             good_new.push_back(calcPoints[i]);
         }
     }
-    vel = (speedSum/good)*100;
-    return vel; // *100 to avoid sub 1 values
+    return (speedSum/good)*100; // *100 to avoid sub 1 values
 }
 
 void Capture::displayAnalysis(const cv::Mat& diffFrame, const cv::Mat& croppedFrame, const std::vector<std::vector<cv::Point>>& contours, const double area, const double avgVel){
     std::string winName = capName + " ANALYSIS - for DEBUGGING purposes ONLY";
-    cv::namedWindow(winName, cv::WINDOW_NORMAL);
+    cv::namedWindow(winName, cv::WINDOW_AUTOSIZE);
     cv::waitKey(1);
     if(!getWindowProperty(winName, cv::WND_PROP_VISIBLE)) isdisplayAnalysis = false;
     else{
@@ -217,7 +246,7 @@ void Capture::displayAnalysis(const cv::Mat& diffFrame, const cv::Mat& croppedFr
             paramToDisplay["AREAS_NUM"] = std::to_string((int)contours.size());
             paramToDisplay["AVG_SPEED"] = std::to_string((int)avgVel);
             paramToDisplay["AREA"] = std::to_string((int)area);
-            paramToDisplay["WEIGHTS"] = std::to_string(weight);
+            paramToDisplay["WEIGHT"] = std::to_string(weight);
         }
         // Insert some labels
         int i = 0;

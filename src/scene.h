@@ -33,6 +33,7 @@ private:
     int outHeight;
     bool displayOutput;
     cv::VideoWriter outVideo;
+    cv::VideoWriter outGeneralMonitor;
     int smoothing;
     bool fpsToFile;
     bool displayAllCaptures;

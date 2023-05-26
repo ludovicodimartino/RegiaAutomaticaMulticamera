@@ -46,6 +46,7 @@ Scene::Scene(const std::string configFilePath){
         int n = topCaps.size() + lateralCaps.size();
         int height = 224 + 112*((n-1)/4);
         generalMonitor = cv::Mat::zeros(cv::Size(1350, height),CV_8UC3);
+        outGeneralMonitor = cv::VideoWriter("../out/monitor.mp4", cv::VideoWriter::fourcc('m','p','4','v'),25, cv::Size(1350,height));
         cv::namedWindow("General Monitor", cv::WINDOW_NORMAL);
         cv::resizeWindow("General Monitor", 1350, height);
     }
@@ -58,6 +59,7 @@ Scene::~Scene(){
     if(fpsToFile) fpsStream.close();
     releaseCaps();
     outVideo.release();
+    outGeneralMonitor.release();
     cv::destroyAllWindows();
 }
 
@@ -164,11 +166,13 @@ void Scene::readConfigFile(const std::string& configFilePath){
                 const int w = std::stoi(value);
                 if(w < 1 || w > 5) throw std::invalid_argument("The weight value '" + value + "' in '" + line + "' is not included in the [1-5] interval");
                 for(const auto& cap : topCaps) if(cap->capName == key) cap->setWeight(w);
+                for(const auto& cap : lateralCaps) if(cap->capName == key) cap->setWeight(w);
                 continue;
             }
 
             if(currentParsing == "[DISPLAY_ANALYSIS]"){
                 for(const auto& cap : topCaps) if(cap->capName == key && value == "true") cap->setDisplayAnalysis(true);
+                for(const auto& cap : lateralCaps) if(cap->capName == key && value == "true") cap->setDisplayAnalysis(true);
                 continue;
             }
 
@@ -206,11 +210,11 @@ void Scene::readConfigFile(const std::string& configFilePath){
 
 void Scene::cameraSwitch(){
     // merge lateral caps and top cap
-    std::vector<std::shared_ptr<Capture>> capsToAnalyze(topCaps.size() + lateralCaps.size());
-    std::merge(topCaps.begin(), topCaps.end(), lateralCaps.begin(), lateralCaps.end(), capsToAnalyze.begin());
+    std::vector<std::shared_ptr<Capture>> allCaps(topCaps.size() + lateralCaps.size());
+    std::merge(topCaps.begin(), topCaps.end(), lateralCaps.begin(), lateralCaps.end(), allCaps.begin());
 
     // Start threads
-    for(auto& cap : capsToAnalyze){
+    for(auto& cap : allCaps){
          threads.push_back(std::thread(&Capture::motionDetection, std::ref(*cap)));
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -218,12 +222,12 @@ void Scene::cameraSwitch(){
     
     uint frameNum = 0; // keep record of the processed frame number
     std::chrono::time_point<std::chrono::system_clock> last_frame = std::chrono::system_clock::now();
-    int selectedFrames[capsToAnalyze.size()] = { 0 }; // Save the selected frame index as if the switching were happening every frame
+    int selectedFrames[allCaps.size()] = { 0 }; // Save the selected frame index as if the switching were happening every frame
     int shownCaptureIndex = 0;
     int fpsToDisplay = 0, fps = 0;
     
     while(1){
-        if(!isAtLeastOneActive(capsToAnalyze)) break;
+        if(!isAtLeastOneActive(allCaps)) break;
         if(displayAllCaptures && !(frameNum%15))clearGeneralMonitor();
 
         // Select the frame to show based on the frame that has the max score.
@@ -231,40 +235,40 @@ void Scene::cameraSwitch(){
         int slectedCapture = -1;
         cv::Mat frameToshow;
 
-        for(int i = 0; i < capsToAnalyze.size(); i++){
-            if(capsToAnalyze[i]->active){
+        for(int i = 0; i < allCaps.size(); i++){
+            if(allCaps[i]->active){
                 // Wait for the processed frame to be ready for this thread
-                std::unique_lock lk(capsToAnalyze[i]->mx);
-                capsToAnalyze[i]->condVar.wait(lk, [&] {return (capsToAnalyze[i]->readyToRetrieve || !capsToAnalyze[i]->active);});
+                std::unique_lock lk(allCaps[i]->mx);
+                allCaps[i]->condVar.wait(lk, [&] {return (allCaps[i]->readyToRetrieve || !allCaps[i]->active);});
                 
                 // Stop signal received
                 if(Capture::stopSignalReceived){
-                    capsToAnalyze[i]->readyToRetrieve = false;
+                    allCaps[i]->readyToRetrieve = false;
                     lk.unlock();
-                    capsToAnalyze[i]->condVar.notify_one();
+                    allCaps[i]->condVar.notify_one();
                     break;
                 } 
 
-                if(capsToAnalyze[i]->active){
-                    if(capsToAnalyze[i]->score > maxScore){
-                        maxScore = capsToAnalyze[i]->score;
+                if(allCaps[i]->active){
+                    if(allCaps[i]->score > maxScore){
+                        maxScore = allCaps[i]->score;
                         slectedCapture = i;
                     }
-                    if(slectedCapture == -1 && i == capsToAnalyze.size()-1){ // Last reached without a max score: force a frame
+                    if(slectedCapture == -1 && i == allCaps.size()-1){ // Last reached without a max score: force a frame
                         slectedCapture = i;
                     } 
                     
                 } 
 
                 // Copy the frame to show
-                if(i == shownCaptureIndex) frameToshow = capsToAnalyze[i]->frame.clone();
+                if(i == shownCaptureIndex) frameToshow = allCaps[i]->frame.clone();
                 
                 //Set the general monitor
-                if(displayAllCaptures) assembleGeneralMonitor(capsToAnalyze[i], frameNum, i == shownCaptureIndex, i, frameToshow);
-                
-                capsToAnalyze[i]->readyToRetrieve = false;
+                if(displayAllCaptures) assembleGeneralMonitor(allCaps[i], frameNum, i == shownCaptureIndex, i, frameToshow);
+                // std::cout << "SCENE: " + std::to_string(allCaps[i]->area) + " " +  std::to_string(allCaps[i]->vel) + " " + std::to_string(allCaps[i]->weight) + " " + std::to_string(allCaps[i]->area_n) + " " + std::to_string(allCaps[i]->score)<< std::endl;
+                allCaps[i]->readyToRetrieve = false;
                 lk.unlock();
-                capsToAnalyze[i]->condVar.notify_one();
+                allCaps[i]->condVar.notify_one();
             }
             
         }
@@ -275,13 +279,13 @@ void Scene::cameraSwitch(){
         // Every "smooth" frames, the frame to display changes: update shownCaptureIndex
         // ShownCaptureIndex is updated taking into account what has happened since the last update
         if(frameNum % smoothing == 0){
-            shownCaptureIndex = std::distance(selectedFrames, std::max_element(selectedFrames, selectedFrames + capsToAnalyze.size()));
-            std::fill(selectedFrames, selectedFrames + capsToAnalyze.size(), 0);
+            shownCaptureIndex = std::distance(selectedFrames, std::max_element(selectedFrames, selectedFrames + allCaps.size()));
+            std::fill(selectedFrames, selectedFrames + allCaps.size(), 0);
         }
 
         // Check if a stop signal has been received
         if(Capture::stopSignalReceived){
-            for(auto& cap : capsToAnalyze){
+            for(auto& cap : allCaps){
                 cap->readyToRetrieve = false;
                 cap->condVar.notify_one();
             }
@@ -339,12 +343,18 @@ void Scene::assembleGeneralMonitor(const std::shared_ptr<Capture>& cap, const in
     
     // update text in the monitor
     if(!(frameNum%15)){
+        std::stringstream stream;
+        stream << std::fixed << std::setprecision(1) << cap->area;
         std::vector<std::string> stats = {std::to_string(capNum + 1), 
                                         std::to_string(cap->area_n),
-                                        std::to_string((int)cap->area), 
-                                        std::to_string((int)cap->vel),
-                                        std::to_string(cap->weight),
-                                        std::to_string((int)cap->score)};
+                                        stream.str()};
+        stream.str(std::string()); //clear the stream
+        stream << std::fixed << std::setprecision(2) << cap->vel;
+        stats.push_back(stream.str());
+        stats.push_back(std::to_string(cap->weight));
+        stream.str(std::string()); //clear the stream
+        stream << std::fixed << std::setprecision(1) << cap->score;
+        stats.push_back(stream.str());
         for(int j = 0; j < stats.size(); j++){
             cv::putText(generalMonitor, stats[j], cv::Point(810 + 90*j, 60 + capNum*30), cv::FONT_HERSHEY_PLAIN, 1.3, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
         }
@@ -370,10 +380,11 @@ void Scene::clearGeneralMonitor(){
 
 void Scene::outputGeneralMonitor(cv::Mat* frame, int fps){
     if(displayAllCaptures){
+        outGeneralMonitor.write(*frame);
         cv::waitKey(1);
         if(!getWindowProperty("General Monitor", cv::WND_PROP_VISIBLE)) displayAllCaptures = false;
         else{
-            cv::putText(generalMonitor, "FPS: " + std::to_string(fps), cv::Point(810, generalMonitor.rows - 60), cv::FONT_HERSHEY_PLAIN, 1.2, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
+            cv::putText(generalMonitor, "FPS: " + std::to_string(fps), cv::Point(810, generalMonitor.rows - 45), cv::FONT_HERSHEY_PLAIN, 1.2, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
             cv::imshow("General Monitor", *frame);
         } 
     }

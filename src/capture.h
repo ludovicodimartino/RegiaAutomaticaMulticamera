@@ -40,6 +40,7 @@ public:
     friend std::ostream& operator <<(std::ostream& os, const Capture& cap);
     void display();
     void motionDetection();
+    void grabFrame();
     void setCrop(const int cropArray[]);
     void setWeight(const int w);
     void setDisplayAnalysis(const bool da);
