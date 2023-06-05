@@ -41,7 +41,7 @@ Scene::Scene(const std::string configFilePath){
         fpsStream << "fps"; // Insert top label in the file
     }
 
-    //Init the zero mat with the right dimensions
+    //Init the general monitor with the right dimensions
     if(displayAllCaptures){
         int n = topCaps.size() + lateralCaps.size();
         int height = 224 + 112*((n-1)/4);
