@@ -3,7 +3,7 @@
 #include <thread>
 #include <csignal>
 
-Capture::Capture(std::string _capName, std::string _source) : VideoCapture(_source){
+Capture::Capture(std::string _capName, std::string _source, bool _analysis) : VideoCapture(_source){
     if(!isOpened()){
         std::cerr << "[CAPTURE " << _capName << "]: Video stream opening error!" << std::endl;
         exit(1);

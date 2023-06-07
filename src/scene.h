@@ -25,7 +25,7 @@ public:
     void displayCaptures(const int cameraType)const; //@param TOP, LATERAL, TOP | LATERAL
     void cameraSwitch();
 private:
-    std::vector<std::shared_ptr<Capture>> topCaps; // ceiling mounted cameras
+    std::vector<std::shared_ptr<Capture>> camToAnalyze; // cameras to analyzed defined in the config file
     std::vector<std::shared_ptr<Capture>> lateralCaps; // wall mounted cameras
     std::vector<std::thread> threads; // threads used for doing the capture computations 
     std::string outPath; // Path of the out stream

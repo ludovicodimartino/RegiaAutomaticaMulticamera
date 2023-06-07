@@ -27,6 +27,7 @@ public:
     std::string capName;
     std::string source;
     cv::Mat frame;
+    bool analysis; // If the score will be calculated
     int weight;
     int area_n;
     double score;
@@ -36,7 +37,7 @@ public:
     bool readyToRetrieve;
     std::mutex mx;
     std::condition_variable condVar;
-    Capture(std::string _capName, std::string _source);
+    Capture(std::string _capName, std::string _source, bool _analysis);
     friend std::ostream& operator <<(std::ostream& os, const Capture& cap);
     void display();
     void motionDetection();

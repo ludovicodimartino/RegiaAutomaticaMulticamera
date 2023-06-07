@@ -43,7 +43,7 @@ Scene::Scene(const std::string configFilePath){
 
     //Init the general monitor with the right dimensions
     if(displayAllCaptures){
-        int n = topCaps.size() + lateralCaps.size();
+        int n = camToAnalyze.size() + lateralCaps.size();
         int height = 224 + 112*((n-1)/4);
         generalMonitor = cv::Mat::zeros(cv::Size(1350, height),CV_8UC3);
         outGeneralMonitor = cv::VideoWriter("../out/monitor.mp4", cv::VideoWriter::fourcc('m','p','4','v'),25, cv::Size(1350,height));
@@ -65,14 +65,14 @@ Scene::~Scene(){
 
 std::ostream& operator <<(std::ostream& os, const Scene& scene){
     os << "TOP CAPTURES" << std::endl;
-    for(auto& cap : scene.topCaps) os << "[" << *cap << "]" << std::endl;
+    for(auto& cap : scene.camToAnalyze) os << "[" << *cap << "]" << std::endl;
     os << "LATERAL CAPTURES" << std::endl;
     for(auto& cap : scene.lateralCaps) os << "[" << *cap << "]" << std::endl;
     return os;
 }
 
 void Scene::releaseCaps() const{
-    for(auto& cap : topCaps) cap->release();
+    for(auto& cap : camToAnalyze) cap->release();
     for(auto& cap : lateralCaps) cap->release();  
 }
 
@@ -81,14 +81,14 @@ void Scene::displayCaptures(const int cameraType) const{
     switch (cameraType)
     {
     case TOP:
-        capsToDisplay = topCaps;
+        capsToDisplay = camToAnalyze;
         break;
     case LATERAL:
         capsToDisplay = lateralCaps;
         break;
     case (TOP | LATERAL):
-        capsToDisplay.reserve( topCaps.size() + lateralCaps.size() ); // preallocate memory
-        capsToDisplay.insert( capsToDisplay.end(), topCaps.begin(), topCaps.end() );
+        capsToDisplay.reserve( camToAnalyze.size() + lateralCaps.size() ); // preallocate memory
+        capsToDisplay.insert( capsToDisplay.end(), camToAnalyze.begin(), camToAnalyze.end() );
         capsToDisplay.insert( capsToDisplay.end(), lateralCaps.begin(), lateralCaps.end() );
         break;
     default:
@@ -105,7 +105,7 @@ void Scene::displayCaptures(const int cameraType) const{
 
 void Scene::readConfigFile(const std::string& configFilePath){
     std::string_view currentParsing; // What the program is parsing
-    const std::vector<std::string_view> configFileLabels = {"[TOP_CAMERAS]", "[LATERAL_CAMERAS]", "[OUT]", 
+    const std::vector<std::string_view> configFileLabels = {"[CAM_TO_ANALYZE]", "[LATERAL_CAMERAS]", "[OUT]", 
                                                             "[GENERAL]", "[CROP_COORDS]", "[WEIGHTS]", 
                                                             "[DISPLAY_ANALYSIS]"}; 
     std::ifstream configFile(configFilePath);
@@ -134,14 +134,21 @@ void Scene::readConfigFile(const std::string& configFilePath){
             std::string value = line.substr(delimiterPos + 1); // value, after the = sign
             
             // Check if the file exists
-            if(currentParsing == "[TOP_CAMERAS]" || currentParsing == "[LATERAL_CAMERAS]"){
+            if(currentParsing == "[CAM_TO_ANALYZE]" || currentParsing == "[LATERAL_CAMERAS]"){
                 std::ifstream file(value); 
                 if(!file.good()) throw std::invalid_argument("Error opening video stream " + value);
             }
 
             // Create the caps
-            if(currentParsing == "[TOP_CAMERAS]") topCaps.push_back(std::make_shared<Capture>(key, value));
-            if(currentParsing == "[LATERAL_CAMERAS]") lateralCaps.push_back(std::make_shared<Capture>(key, value));
+            if(currentParsing == "[CAM_TO_ANALYZE]") camToAnalyze.push_back(std::make_shared<Capture>(key, value, true));
+            if(currentParsing == "[LATERAL_CAMERAS]"){
+                bool exists = false;
+                for(const auto& cap : camToAnalyze){
+                    if(cap->capName == key) exists = true;
+                }
+                if(!exists)camToAnalyze.push_back(std::make_shared<Capture>(key, value, false));
+            } 
+        
         
             // Setting crop values for analysis
             if(currentParsing == "[CROP_COORDS]"){
@@ -153,7 +160,7 @@ void Scene::readConfigFile(const std::string& configFilePath){
                     pos = nextPos + 1;
                 }
                 cropValues[3] = std::stoi(value.substr(pos, value.find(")") - pos));
-                for(const auto& cap : topCaps){
+                for(const auto& cap : camToAnalyze){
                     if(cap->capName == key){
                         cap->setCrop(cropValues);
                     } 
@@ -165,13 +172,13 @@ void Scene::readConfigFile(const std::string& configFilePath){
                 //Check if in range
                 const int w = std::stoi(value);
                 if(w < 1 || w > 5) throw std::invalid_argument("The weight value '" + value + "' in '" + line + "' is not included in the [1-5] interval");
-                for(const auto& cap : topCaps) if(cap->capName == key) cap->setWeight(w);
+                for(const auto& cap : camToAnalyze) if(cap->capName == key) cap->setWeight(w);
                 for(const auto& cap : lateralCaps) if(cap->capName == key) cap->setWeight(w);
                 continue;
             }
 
             if(currentParsing == "[DISPLAY_ANALYSIS]"){
-                for(const auto& cap : topCaps) if(cap->capName == key && value == "true") cap->setDisplayAnalysis(true);
+                for(const auto& cap : camToAnalyze) if(cap->capName == key && value == "true") cap->setDisplayAnalysis(true);
                 for(const auto& cap : lateralCaps) if(cap->capName == key && value == "true") cap->setDisplayAnalysis(true);
                 continue;
             }
@@ -209,69 +216,73 @@ void Scene::readConfigFile(const std::string& configFilePath){
 }
 
 void Scene::cameraSwitch(){
-    // merge lateral caps and top cap
-    std::vector<std::shared_ptr<Capture>> allCaps(topCaps.size() + lateralCaps.size());
-    std::merge(topCaps.begin(), topCaps.end(), lateralCaps.begin(), lateralCaps.end(), allCaps.begin());
-
     // Start threads
-    for(auto& cap : allCaps){
-         threads.push_back(std::thread(&Capture::motionDetection, std::ref(*cap)));
+    for(const auto& cap : camToAnalyze){
+        if(cap->analysis) threads.push_back(std::thread(&Capture::motionDetection, std::ref(*cap)));
+        else threads.push_back(std::thread(&Capture::grabFrame, std::ref(*cap))); // just grab frames for camera that are not analyzed
     }
+
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     std::cout << "Threads started\nPress Ctrl+C to stop" << std::endl;
     
     uint frameNum = 0; // keep record of the processed frame number
     std::chrono::time_point<std::chrono::system_clock> last_frame = std::chrono::system_clock::now();
-    int selectedFrames[allCaps.size()] = { 0 }; // Save the selected frame index as if the switching were happening every frame
-    int shownCaptureIndex = 0;
+    int selectedFrames[camToAnalyze.size()] = { 0 }; // Save the selected frame index as if the switching were happening every frame
+    int shownCaptureIndex = camToAnalyze.size(); // Index of the analyzed winning camera
     int fpsToDisplay = 0, fps = 0;
     
     while(1){
-        if(!isAtLeastOneActive(allCaps)) break;
+        if(!isAtLeastOneActive(camToAnalyze)) break;
         if(displayAllCaptures && !(frameNum%15))clearGeneralMonitor();
 
-        // Select the frame to show based on the frame that has the max score.
+        // Select the caps to show based on the cap that has the max score.
         double maxScore = 0;
         int slectedCapture = -1;
         cv::Mat frameToshow;
 
-        for(int i = 0; i < allCaps.size(); i++){
-            if(allCaps[i]->active){
+        for(int i = 0; i < camToAnalyze.size(); i++){
+            if(camToAnalyze[i]->active){
                 // Wait for the processed frame to be ready for this thread
-                std::unique_lock lk(allCaps[i]->mx);
-                allCaps[i]->condVar.wait(lk, [&] {return (allCaps[i]->readyToRetrieve || !allCaps[i]->active);});
+                std::unique_lock lk(camToAnalyze[i]->mx);
+                camToAnalyze[i]->condVar.wait(lk, [&] {return (camToAnalyze[i]->readyToRetrieve || !camToAnalyze[i]->active);});
                 
                 // Stop signal received
                 if(Capture::stopSignalReceived){
-                    allCaps[i]->readyToRetrieve = false;
+                    camToAnalyze[i]->readyToRetrieve = false;
                     lk.unlock();
-                    allCaps[i]->condVar.notify_one();
+                    camToAnalyze[i]->condVar.notify_one();
                     break;
                 } 
 
-                if(allCaps[i]->active){
-                    if(allCaps[i]->score > maxScore){
-                        maxScore = allCaps[i]->score;
+                if(camToAnalyze[i]->active && camToAnalyze[i]->analysis){
+                    if(camToAnalyze[i]->score > maxScore){ // find the maximum score
+                        maxScore = camToAnalyze[i]->score;
                         slectedCapture = i;
                     }
-                    if(slectedCapture == -1 && i == allCaps.size()-1){ // Last reached without a max score: force a frame
+                    if(slectedCapture == -1 && i == camToAnalyze.size()-1){ // Last reached without a max score: force a frame
                         slectedCapture = i;
                     } 
                     
                 } 
 
-                // Copy the frame to show
-                if(i == shownCaptureIndex) frameToshow = allCaps[i]->frame.clone();
+                // Copy the frame to show based on the associations
+                if(i == shownCaptureIndex) frameToshow = camToAnalyze[i]->frame.clone();
                 
-                //Set the general monitor
-                if(displayAllCaptures) assembleGeneralMonitor(allCaps[i], frameNum, i == shownCaptureIndex, i, frameToshow);
-                // std::cout << "SCENE: " + std::to_string(allCaps[i]->area) + " " +  std::to_string(allCaps[i]->vel) + " " + std::to_string(allCaps[i]->weight) + " " + std::to_string(allCaps[i]->area_n) + " " + std::to_string(allCaps[i]->score)<< std::endl;
-                allCaps[i]->readyToRetrieve = false;
+                // Set the general monitor
+                if(displayAllCaptures) assembleGeneralMonitor(camToAnalyze[i], frameNum, i == shownCaptureIndex, i, frameToshow);
+                // std::cout << "SCENE: " + std::to_string(camToAnalyze[i]->area) + " " +  std::to_string(camToAnalyze[i]->vel) + " " + std::to_string(camToAnalyze[i]->weight) + " " + std::to_string(camToAnalyze[i]->area_n) + " " + std::to_string(camToAnalyze[i]->score)<< std::endl;
+                camToAnalyze[i]->readyToRetrieve = false;
                 lk.unlock();
-                allCaps[i]->condVar.notify_one();
+                camToAnalyze[i]->condVar.notify_one();
             }
             
         }
+
+        // loop for displaying on the general monitor the cameras to show in the output
+        for(int i = 0; i < lateralCaps.size(); i++){
+            // start the grab frame thread only if the capture is not also an analysis capture
+        }
+
 
         //Increment the selectedFrame count
         selectedFrames[slectedCapture]++;
@@ -279,13 +290,13 @@ void Scene::cameraSwitch(){
         // Every "smooth" frames, the frame to display changes: update shownCaptureIndex
         // ShownCaptureIndex is updated taking into account what has happened since the last update
         if(frameNum % smoothing == 0){
-            shownCaptureIndex = std::distance(selectedFrames, std::max_element(selectedFrames, selectedFrames + allCaps.size()));
-            std::fill(selectedFrames, selectedFrames + allCaps.size(), 0);
+            shownCaptureIndex = std::distance(selectedFrames, std::max_element(selectedFrames, selectedFrames + camToAnalyze.size()));
+            std::fill(selectedFrames, selectedFrames + camToAnalyze.size(), 0);
         }
 
         // Check if a stop signal has been received
         if(Capture::stopSignalReceived){
-            for(auto& cap : allCaps){
+            for(auto& cap : camToAnalyze){
                 cap->readyToRetrieve = false;
                 cap->condVar.notify_one();
             }
