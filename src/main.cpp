@@ -36,7 +36,7 @@ int main(int argc, char** argv){
     //start the camera switching or the camera display 
     if(displayMode){
         try{
-            scene.displayCaptures(TOP);
+            scene.displayCaptures();
         } catch(const std::exception& e){
             std::cerr << "[DISPLAY CAPTURES ERROR]: " << e.what() << std::endl;
         } catch(...){

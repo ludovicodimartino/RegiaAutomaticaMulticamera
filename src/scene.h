@@ -22,13 +22,15 @@ public:
     Scene(const std::string configFilePath);
     ~Scene();
     friend std::ostream& operator <<(std::ostream& os, const Scene& scene);
-    void displayCaptures(const int cameraType)const; //@param TOP, LATERAL, TOP | LATERAL
+    void displayCaptures();
     void cameraSwitch();
 private:
-    std::vector<std::shared_ptr<Capture>> camToAnalyze; // cameras to analyzed defined in the config file
-    std::vector<std::shared_ptr<Capture>> lateralCaps; // wall mounted cameras
+    std::vector<std::shared_ptr<Capture>> captures; // cameras to analyzed and to show defined in the config file
     std::vector<std::thread> threads; // threads used for doing the capture computations 
+    std::vector<std::vector<int>> associations;
     std::string outPath; // Path of the out stream
+    int camToAnalyzeCount;
+    int camToShowCount;
     int outWidth;
     int outHeight;
     bool displayOutput;
@@ -42,6 +44,7 @@ private:
     std::ofstream fpsStream;
     bool isAtLeastOneActive(const std::vector<std::shared_ptr<Capture>>& caps)const;
     void readConfigFile(const std::string& configFilePath);
+    void checkAssociationsIntegrity()const;
     void releaseCaps()const;
     void clearGeneralMonitor();
     void assembleGeneralMonitor(const std::shared_ptr<Capture>& cap, const int frameNum, const bool isLive, const int capNum, const cv::Mat& frameToShow);

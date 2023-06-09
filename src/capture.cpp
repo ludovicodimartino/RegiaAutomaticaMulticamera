@@ -10,6 +10,7 @@ Capture::Capture(std::string _capName, std::string _source, bool _analysis) : Vi
     }
     capName = _capName;
     source = _source;
+    analysis = _analysis;
     processedFrameNum = -1; // frame number that is being processed
     readyToRetrieve = false;
     isdisplayAnalysis = false;
@@ -33,7 +34,7 @@ bool Capture::stopSignalReceived = false;
 double Capture::alpha = 0;
 
 std::ostream& operator <<(std::ostream& os, const Capture& cap){
-    os << "CAPTURE NAME: " << cap.capName << " CAPTURE PATH: " << cap.source << " RATIO: " << cap.ratio;
+    os << "CAPTURE NAME: " << cap.capName << " CAPTURE PATH: " << cap.source << " RATIO: " << cap.ratio << " ANALYSIS: " << cap.analysis;
     return os;
 }
 
@@ -71,7 +72,7 @@ void Capture::display(){
 }
 
 void Capture::motionDetection(){
-    printf("thread ID: %d Name: %s\n",std::this_thread::get_id(), capName.c_str());
+    printf("Analysis thread ID: %d Name: %s\n",std::this_thread::get_id(), capName.c_str());
     cv::Mat croppedFrame, previousFrame, originalFrame, currDiffFrame;
     while(isOpened()){
         active = true;
@@ -148,7 +149,7 @@ void Capture::motionDetection(){
 }
 
 void Capture::grabFrame(){
-    printf("thread ID: %d Name: %s\n",std::this_thread::get_id(), capName.c_str());
+    printf("Grab thread ID: %d Name: %s\n",std::this_thread::get_id(), capName.c_str());
     cv::Mat grabbedFrame;
     while(isOpened()){
         active = true;
