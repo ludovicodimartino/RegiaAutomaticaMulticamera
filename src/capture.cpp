@@ -71,8 +71,8 @@ void Capture::display(){
     }
 }
 
-void Capture::motionDetection(){
-    printf("Analysis thread ID: %d Name: %s\n",std::this_thread::get_id(), capName.c_str());
+void Capture::FrameDiffAreaAndVel(){
+    printf("FrameDiffAreaAndVel thread ID: %d Name: %s\n",std::this_thread::get_id(), capName.c_str());
     cv::Mat croppedFrame, previousFrame, originalFrame, currDiffFrame;
     while(isOpened()){
         active = true;
@@ -80,11 +80,7 @@ void Capture::motionDetection(){
         
         // Copy the original frame
         croppedFrame = originalFrame.clone();
-        // Crop the frame in order to consider just the playground
-        croppedFrame = croppedFrame(cv::Range(cropCoords[0], cropCoords[1]), cv::Range(cropCoords[2], cropCoords[3]));
-
-        //Resize the frame for faster analysis
-        cv::resize(croppedFrame, croppedFrame, cv::Size(150, (croppedFrame.rows/(double)croppedFrame.cols)*150), cv::INTER_AREA);
+        preProcessing(&croppedFrame);
         
         // Check if a stop signal has arrived
         if(stopSignalReceived){
@@ -92,19 +88,8 @@ void Capture::motionDetection(){
             break;
         }
 
-        // Preprocessing
-        cvtColor(croppedFrame, croppedFrame, cv::COLOR_BGR2GRAY); //gray scale
-        GaussianBlur(croppedFrame, croppedFrame, cv::Size(5,5), 0.3); //gussian blur
-        
         if(processedFrameNum + 1) {
-            absdiff(previousFrame, croppedFrame, currDiffFrame);
-            // make the areas bigger
-            dilate(currDiffFrame, currDiffFrame, cv::getStructuringElement( cv::MORPH_ELLIPSE,
-                       cv::Size( DILATE_SIZE*DILATE_SIZE + 1, DILATE_SIZE*DILATE_SIZE+1 ),
-                       cv::Point( 2, 2 )));
-            //Threshold (black and white)
-            threshold(currDiffFrame, currDiffFrame, 20, 255, cv::THRESH_BINARY);
-        
+            frameDifferencing(&currDiffFrame, &previousFrame, &croppedFrame);
             //Calculate the score of the frame
             std::vector<std::vector<cv::Point>> contours;
             findContours(currDiffFrame, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
@@ -116,7 +101,6 @@ void Capture::motionDetection(){
                 avgVel = getAvgSpeed(croppedFrame, previousFrame, contours);
                 double nalpha = std::pow(n, alpha); // n to the power of alpha
                 s = tmpArea*avgVel*weight*nalpha; // calculate the weighted score
-                //std::cout << std::to_string(tmpArea) + " " + std::to_string(avgVel)  + " " + std::to_string(weight) + " " + std::to_string(area_n) + " " + std::to_string(s) + "\n";
             }
 
             //acquire lock
@@ -127,7 +111,6 @@ void Capture::motionDetection(){
             area = tmpArea; // update the area
             vel = avgVel; // update the speed
             area_n = n; // update areas number
-            // std::cout << "CAPTURE: " + std::to_string(area) + " " + std::to_string(vel)  + " " + std::to_string(weight) + " " + std::to_string(area_n) + " " + std::to_string(score) + "\n";
             if(isdisplayAnalysis) displayAnalysis(currDiffFrame, croppedFrame, contours, tmpArea, avgVel); 
             frame.release();
             frame = originalFrame.clone(); // update the frame
@@ -176,6 +159,28 @@ void Capture::grabFrame(){
     }
     active = false;
     condVar.notify_one(); // To unlock the scene while loop
+}
+
+void Capture::preProcessing(cv::Mat* f)const{
+     // Crop the frame in order to consider just the playground
+    (*f) = (*f)(cv::Range(cropCoords[0], cropCoords[1]), cv::Range(cropCoords[2], cropCoords[3]));
+
+    //Resize the frame for faster analysis
+    cv::resize(*f, *f, cv::Size(150, (f->rows/(double)f->cols)*150), cv::INTER_AREA);
+    
+    // Pre-processing
+    cvtColor(*f, *f, cv::COLOR_BGR2GRAY); //gray scale
+    GaussianBlur(*f, *f, cv::Size(5,5), 0.3); //gussian blur
+}
+
+void Capture::frameDifferencing(cv::Mat* dst, cv::Mat* f1, cv::Mat* f2)const{
+    cv::absdiff(*f1, *f2, *dst);
+    // make the areas bigger
+    dilate(*dst, *dst, cv::getStructuringElement( cv::MORPH_ELLIPSE,
+                cv::Size( DILATE_SIZE*DILATE_SIZE + 1, DILATE_SIZE*DILATE_SIZE+1 ),
+                cv::Point( 2, 2 )));
+    //Threshold (black and white)
+    threshold(*dst, *dst, 20, 255, cv::THRESH_BINARY);
 }
 
 double Capture::getArea(const std::vector<std::vector<cv::Point>>& contours){

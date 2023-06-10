@@ -2,6 +2,7 @@
 #include "capture.h"
 #include <iostream>
 #include <string>
+#include <map>
 #include <fstream>
 #include <thread>
 #include <chrono>
@@ -20,6 +21,10 @@ Scene::Scene(const std::string configFilePath){
     displayAllCaptures=false;
     fpsFilePath = "../out/FPS.csv";
     camToAnalyzeCount = 0;
+    method = nullptr;
+
+    //Init method labels
+    methodLabels.insert({"FrameDiffAreaAndVel", &Capture::FrameDiffAreaAndVel});
 
 
     // Reading config File
@@ -85,7 +90,7 @@ void Scene::displayCaptures(){
 }
 
 void Scene::readConfigFile(const std::string& configFilePath){
-    std::string_view currentParsing; // What the program is parsing
+    std::string_view currentParsing; // What the program is currently parsing
     const std::vector<std::string_view> configFileLabels = {"[CAM_TO_ANALYZE]", "[CAM_TO_SHOW]","[ASSOCIATIONS]", "[OUT]", 
                                                             "[GENERAL]", "[CROP_COORDS]", "[WEIGHTS]", 
                                                             "[DISPLAY_ANALYSIS]"}; 
@@ -173,7 +178,13 @@ void Scene::readConfigFile(const std::string& configFilePath){
                 //Check if in range
                 const int w = std::stoi(value);
                 if(w < 1 || w > 5) throw std::invalid_argument("The weight value '" + value + "' in '" + line + "' is not included in the [1-5] interval");
-                for(const auto& cap : captures) if(cap->capName == key) cap->setWeight(w);
+                for(const auto& cap : captures){
+                    if(cap->capName == key){
+                        if(!cap->analysis) throw std::invalid_argument("A weight value can only be assigned to analyzed cameras. '" + value + "' does not appear in the [CAM_TO_ANALYZE] section.");
+                        cap->setWeight(w);  
+                        break;
+                    } 
+                } 
                 continue;
             }
 
@@ -205,12 +216,17 @@ void Scene::readConfigFile(const std::string& configFilePath){
                     double a = std::stod(value);
                     if(a <= -1 || a >= 1) throw std::invalid_argument("The alpha value '" + value + "' in '" + line + "' is not included in the ]-1,1[ interval");
                     else Capture::alpha = a;
-                } 
+                }
+                if(key == "method"){
+                    for(const auto& [name, pointer] : methodLabels) if(name == value) method = pointer;
+                    if(method == nullptr) throw std::invalid_argument("Invalid switching method '" + value + "'");
+                }
                 continue;
             } 
         }
         configFile.close();
         checkAssociationsIntegrity();
+        if(method == nullptr) throw std::invalid_argument("Switching method not defined! Please define it as follow:\nmethod=<switchingMethod>");
         std::cout << "Configuration read!" << std::endl;
     } else throw std::invalid_argument("Error while opening the config file. Check the config file name and path.\n--help for help.");
 }
@@ -225,7 +241,7 @@ void Scene::checkAssociationsIntegrity()const{
 void Scene::cameraSwitch(){
     // Start threads
     for(const auto& cap : captures){
-        if(cap->analysis) threads.push_back(std::thread(&Capture::motionDetection, std::ref(*cap)));
+        if(cap->analysis) threads.push_back(std::thread(method, std::ref(*cap)));
         else threads.push_back(std::thread(&Capture::grabFrame, std::ref(*cap))); // just grab frames for camera that are not analyzed
     }
 
@@ -235,7 +251,7 @@ void Scene::cameraSwitch(){
     uint frameNum = 0; // keep record of the processed frame number
     std::chrono::time_point<std::chrono::system_clock> last_frame = std::chrono::system_clock::now();
     int selectedFrames[captures.size()] = { 0 }; // Save the selected frame index as if the switching were happening every frame
-    int shownCaptureIndex = 0; // Index of the analyzed winning camera
+    int shownCaptureIndex = captures.size()-1; // Index of the analyzed winning camera
     int fpsToDisplay = 0, fps = 0;
     
     while(1){
@@ -244,7 +260,8 @@ void Scene::cameraSwitch(){
 
         // Select the caps to show based on the cap that has the max score.
         double maxScore = 0;
-        int slectedCapture = -1;
+        int selectedCapture = -1;
+        int selectedAnalysisCapture = -1;
         cv::Mat frameToshow;
 
         for(int i = 0; i < captures.size(); i++){
@@ -264,13 +281,15 @@ void Scene::cameraSwitch(){
                 if(captures[i]->active && captures[i]->analysis){
                     if(captures[i]->score > maxScore){ // find the maximum score
                         maxScore = captures[i]->score;
-                        slectedCapture = i;
+                        selectedAnalysisCapture = i;
                     }
-                    if(slectedCapture == -1 && i == captures.size()-1){ // Last reached without a max score: force a frame
-                        slectedCapture = i;
+                    if(selectedAnalysisCapture == -1 && i == captures.size()-1){ // Last reached without a max score: force a frame
+                        selectedAnalysisCapture = i;
                     } 
                 } 
                 // Change the selected capture based on the associations matrix
+                if(selectedAnalysisCapture > -1) selectedCapture = associations[selectedAnalysisCapture][rand()%(associations[selectedAnalysisCapture].size())];
+                
                 // Copy the frame to show based on the associations
                 if(i == shownCaptureIndex) frameToshow = captures[i]->frame.clone();
                 
@@ -285,7 +304,7 @@ void Scene::cameraSwitch(){
         }
 
         //Increment the selectedFrame count
-        selectedFrames[slectedCapture]++;
+        selectedFrames[selectedCapture]++;
 
         // Every "smooth" frames, the frame to display changes: update shownCaptureIndex
         // ShownCaptureIndex is updated taking into account what has happened since the last update
@@ -354,7 +373,7 @@ void Scene::assembleGeneralMonitor(const std::shared_ptr<Capture>& cap, const in
     if(isLive) cv::rectangle(cap->frame, cv::Rect(0,0, cap->frame.cols, cap->frame.rows), cv::Scalar(0,255,0), 4,8);
     
     // update text in the monitor
-    if(!(frameNum%15)){
+    if(cap->analysis && !(frameNum%15)){
         std::stringstream stream;
         stream << std::fixed << std::setprecision(1) << cap->area;
         std::vector<std::string> stats = {std::to_string(capNum + 1), 

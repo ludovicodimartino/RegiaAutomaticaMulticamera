@@ -28,12 +28,14 @@ private:
     std::vector<std::shared_ptr<Capture>> captures; // cameras to analyzed and to show defined in the config file
     std::vector<std::thread> threads; // threads used for doing the capture computations 
     std::vector<std::vector<int>> associations;
+    std::map<std::string_view, void (Capture::*)()> methodLabels;
     std::string outPath; // Path of the out stream
     int camToAnalyzeCount;
     int camToShowCount;
     int outWidth;
     int outHeight;
     bool displayOutput;
+    void (Capture::*method)(); // Function pointer to the function used for the camera switching
     cv::VideoWriter outVideo;
     cv::VideoWriter outGeneralMonitor;
     int smoothing;
