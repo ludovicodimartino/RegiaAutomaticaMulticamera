@@ -71,6 +71,59 @@ void Capture::display(){
     }
 }
 
+void Capture::FrameDiffAreaOnly(){
+    printf("FrameDiffAreaOnly thread ID: %d Name: %s\n",std::this_thread::get_id(), capName.c_str());
+    cv::Mat croppedFrame, previousFrame, originalFrame, currDiffFrame;
+    while(isOpened()){
+        active = true;
+        if(!read(originalFrame))break;
+        
+        // Copy the original frame
+        croppedFrame = originalFrame.clone();
+        preProcessing(&croppedFrame);
+
+        // Check if a stop signal has arrived
+        if(stopSignalReceived){
+            readyToRetrieve = true;
+            break;
+        }
+        
+        if(processedFrameNum + 1) {
+            frameDifferencing(&currDiffFrame, &previousFrame, &croppedFrame);
+            std::vector<std::vector<cv::Point>> contours;
+            findContours(currDiffFrame, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+            double tmpArea = 0, s = 0;
+            int n = contours.size();
+            //Check whether contours.size is greater than 0 before performing the calculation
+            if(n > 0){
+                tmpArea = getArea(contours);
+                s = tmpArea*weight; // calculate the weighted score
+            }
+            //acquire lock
+            std::unique_lock lk(mx);
+            condVar.wait(lk, [this] {return !readyToRetrieve;});
+            
+            score = s; // update the score
+            area = tmpArea; // update the area
+
+            frame.release();
+            frame = originalFrame.clone(); // update the frame
+            readyToRetrieve = true;
+            // Unlock and notify
+            lk.unlock();
+            condVar.notify_one();
+        }
+        previousFrame.release();
+        previousFrame = croppedFrame.clone(); // Save the previous frame
+        croppedFrame.release();
+        currDiffFrame.release();
+        originalFrame.release();
+        ++processedFrameNum;
+    }
+    active = false;
+    condVar.notify_one();
+}
+
 void Capture::FrameDiffAreaAndVel(){
     printf("FrameDiffAreaAndVel thread ID: %d Name: %s\n",std::this_thread::get_id(), capName.c_str());
     cv::Mat croppedFrame, previousFrame, originalFrame, currDiffFrame;

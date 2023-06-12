@@ -42,7 +42,7 @@ public:
     friend std::ostream& operator <<(std::ostream& os, const Capture& cap);
     void display();
     void FrameDiffAreaAndVel();
-    void frameDiffAreaOnly();
+    void FrameDiffAreaOnly();
     void grabFrame();
     void setCrop(const int cropArray[]);
     void setWeight(const int w);

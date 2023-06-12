@@ -24,7 +24,8 @@ Scene::Scene(const std::string configFilePath){
     method = nullptr;
 
     //Init method labels
-    methodLabels.insert({"FrameDiffAreaAndVel", &Capture::FrameDiffAreaAndVel});
+    methodLabels.insert({{"FrameDiffAreaAndVel", &Capture::FrameDiffAreaAndVel},
+                         {"FrameDiffAreaOnly", &Capture::FrameDiffAreaOnly}});
 
 
     // Reading config File
@@ -180,7 +181,7 @@ void Scene::readConfigFile(const std::string& configFilePath){
                 if(w < 1 || w > 5) throw std::invalid_argument("The weight value '" + value + "' in '" + line + "' is not included in the [1-5] interval");
                 for(const auto& cap : captures){
                     if(cap->capName == key){
-                        if(!cap->analysis) throw std::invalid_argument("A weight value can only be assigned to analyzed cameras. '" + value + "' does not appear in the [CAM_TO_ANALYZE] section.");
+                        if(!cap->analysis) throw std::invalid_argument("A weight value can only be assigned to analyzed cameras. '" + key + "' does not appear in the [CAM_TO_ANALYZE] section.");
                         cap->setWeight(w);  
                         break;
                     } 
@@ -283,7 +284,7 @@ void Scene::cameraSwitch(){
                         maxScore = captures[i]->score;
                         selectedAnalysisCapture = i;
                     }
-                    if(selectedAnalysisCapture == -1 && i == captures.size()-1){ // Last reached without a max score: force a frame
+                    if(selectedAnalysisCapture == -1 && i == camToAnalyzeCount-1){ // Last reached without a max score: force a frame
                         selectedAnalysisCapture = i;
                     } 
                 } 
