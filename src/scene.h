@@ -35,12 +35,12 @@ private:
     int outWidth;
     int outHeight;
     bool displayOutput;
-    void (Capture::*method)(); // Function pointer to the function used for the camera switching
+    void (Capture::*method)(); // Function pointer to the method used for the camera switching
     cv::VideoWriter outVideo;
     cv::VideoWriter outGeneralMonitor;
     int smoothing;
     bool fpsToFile;
-    bool displayAllCaptures;
+    bool displayGeneralMonitor;
     cv::Mat generalMonitor;
     std::string fpsFilePath;
     std::ofstream fpsStream;

@@ -18,7 +18,7 @@ Scene::Scene(const std::string configFilePath){
     displayOutput = false;
     smoothing = 20;
     fpsToFile = false;
-    displayAllCaptures=false;
+    displayGeneralMonitor=false;
     fpsFilePath = "../out/FPS.csv";
     camToAnalyzeCount = 0;
     method = nullptr;
@@ -50,7 +50,7 @@ Scene::Scene(const std::string configFilePath){
     }
 
     //Init the general monitor with the right dimensions
-    if(displayAllCaptures){
+    if(displayGeneralMonitor){
         int height = 224 + 112*((captures.size()-1)/4);
         generalMonitor = cv::Mat::zeros(cv::Size(1350, height),CV_8UC3);
         outGeneralMonitor = cv::VideoWriter("../out/monitor.mp4", cv::VideoWriter::fourcc('m','p','4','v'),25, cv::Size(1350,height));
@@ -211,7 +211,7 @@ void Scene::readConfigFile(const std::string& configFilePath){
                     smoothing = tmp;
                 } 
                 if(key == "fpsToFile" && value == "true") fpsToFile = true;
-                if(key == "displayAllCaptures" && value == "true") displayAllCaptures=true;
+                if(key == "displayAllCaptures" && value == "true") displayGeneralMonitor=true;
                 if(key == "fpsFilePath") fpsFilePath = value;
                 if(key == "alpha"){
                     double a = std::stod(value);
@@ -257,7 +257,7 @@ void Scene::cameraSwitch(){
     
     while(1){
         if(!isAtLeastOneActive(captures)) break;
-        if(displayAllCaptures && !(frameNum%15))clearGeneralMonitor();
+        if(displayGeneralMonitor && !(frameNum%15))clearGeneralMonitor();
 
         // Select the caps to show based on the cap that has the max score.
         double maxScore = 0;
@@ -295,7 +295,7 @@ void Scene::cameraSwitch(){
                 if(i == shownCaptureIndex) frameToshow = captures[i]->frame.clone();
                 
                 // Set the general monitor
-                if(displayAllCaptures) assembleGeneralMonitor(captures[i], frameNum, i == shownCaptureIndex, i, frameToshow);
+                if(displayGeneralMonitor) assembleGeneralMonitor(captures[i], frameNum, i == shownCaptureIndex, i, frameToshow);
                 // std::cout << "SCENE: " + std::to_string(camToAnalyze[i]->area) + " " +  std::to_string(camToAnalyze[i]->vel) + " " + std::to_string(camToAnalyze[i]->weight) + " " + std::to_string(camToAnalyze[i]->area_n) + " " + std::to_string(camToAnalyze[i]->score)<< std::endl;
                 captures[i]->readyToRetrieve = false;
                 lk.unlock();
@@ -411,10 +411,10 @@ void Scene::clearGeneralMonitor(){
 }
 
 void Scene::outputGeneralMonitor(cv::Mat* frame, int fps){
-    if(displayAllCaptures){
+    if(displayGeneralMonitor){
         outGeneralMonitor.write(*frame);
         cv::waitKey(1);
-        if(!getWindowProperty("General Monitor", cv::WND_PROP_VISIBLE)) displayAllCaptures = false;
+        if(!getWindowProperty("General Monitor", cv::WND_PROP_VISIBLE)) displayGeneralMonitor = false;
         else{
             cv::putText(generalMonitor, "FPS: " + std::to_string(fps), cv::Point(810, generalMonitor.rows - 45), cv::FONT_HERSHEY_PLAIN, 1.2, CV_RGB(230, 230, 230), 1, cv::LINE_AA);
             cv::imshow("General Monitor", *frame);

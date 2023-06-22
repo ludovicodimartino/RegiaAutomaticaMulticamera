@@ -230,8 +230,8 @@ void Capture::frameDifferencing(cv::Mat* dst, cv::Mat* f1, cv::Mat* f2)const{
     cv::absdiff(*f1, *f2, *dst);
     // make the areas bigger
     dilate(*dst, *dst, cv::getStructuringElement( cv::MORPH_ELLIPSE,
-                cv::Size( DILATE_SIZE*DILATE_SIZE + 1, DILATE_SIZE*DILATE_SIZE+1 ),
-                cv::Point( 2, 2 )));
+                cv::Size( 2*DILATE_SIZE + 1, 2*DILATE_SIZE+1 ),
+                cv::Point(DILATE_SIZE, DILATE_SIZE))); // DILATE_SIZE depends on the resolution of the frame
     //Threshold (black and white)
     threshold(*dst, *dst, 20, 255, cv::THRESH_BINARY);
 }
@@ -312,13 +312,12 @@ void Capture::displayAnalysis(const cv::Mat& diffFrame, const cv::Mat& croppedFr
         for(const auto& [key, val] : paramToDisplay){
             cv::putText(out, //target image
                 key + ": " + val, //text
-                cv::Point(5, 30*(1 + i++)), //top-left position
+                cv::Point(5, 30*(1 + i++)),
                 cv::FONT_HERSHEY_PLAIN,
                 1.5,
                 CV_RGB(0, 0, 255), //font color
                 1);
         }
-        //DA RIMUOVERE
         if(processedFrameNum == 0)analysisOut = cv::VideoWriter("../out/" + capName + "_Analysis.mp4", cv::VideoWriter::fourcc('m','p','4','v'),25, cv::Size(out.cols, out.rows));
         analysisOut.write(out);
         cv::imshow(winName, out);
